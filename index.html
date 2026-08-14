@@ -5,6 +5,44 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>EV</title>
 <style>
+  /* iPhone/mobile layout */
+@media (max-width: 600px) {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+
+  * {
+    max-width: 100%;
+  }
+
+  body {
+    width: 100vw;
+    min-height: 100dvh;
+  }
+
+  .app,
+  .container,
+  .main,
+  .chat,
+  .chat-container {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  input,
+  textarea,
+  button {
+    max-width: 100%;
+  }
+}
   :root{
     --void: #08090b;
     --panel: #0e1013;
