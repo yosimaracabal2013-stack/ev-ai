@@ -1068,7 +1068,7 @@ async function getLocalGenerator(){
 
     return await pipeline(
       'text-generation',
-      'onnx-community/Qwen2.5-0.5B-Instruct',
+      'onnx-community/SmolLM2-135M-Instruct',
       {
         device: useWebGPU ? 'webgpu' : 'wasm',
         dtype: useWebGPU ? 'q4f16' : 'q4'
