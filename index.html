@@ -1063,17 +1063,32 @@ async function getLocalGenerator(){
     const { pipeline } = await import(
       'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.1'
     );
+const useWebGPU =
+  !!navigator.gpu &&
+  !/iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    const useWebGPU = !!navigator.gpu;
+try {
+  return await pipeline(
+    'text-generation',
+    'onnx-community/SmolLM2-135M-Instruct',
+    {
+      device: useWebGPU ? 'webgpu' : 'wasm',
+      dtype: useWebGPU ? 'q4f16' : 'q4'
+    }
+  );
+} catch (gpuError) {
+  console.warn('WebGPU failed, falling back to WASM:', gpuError);
 
-    return await pipeline(
-      'text-generation',
-      'onnx-community/SmolLM2-135M-Instruct',
-      {
-        device: useWebGPU ? 'webgpu' : 'wasm',
-        dtype: useWebGPU ? 'q4f16' : 'q4'
-      }
-    );
+  return await pipeline(
+    'text-generation',
+    'onnx-community/SmolLM2-135M-Instruct',
+    {
+      device: 'wasm',
+      dtype: 'q4'
+    }
+  );
+}
+    
   })();
 
   try {
