@@ -2,10 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>E.V.</title>
-  <meta http-equiv="refresh" content="0; url=./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed%281%29.html">
-  <script>window.location.replace('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed%281%29.html');</script>
+  <style>
+    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#08090b; }
+    #evFrame { display:block; width:100%; height:100%; border:0; }
+  </style>
 </head>
-<body>Opening E.V.…</body>
+<body>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html" title="E.V."></iframe>
+  <script>
+    const frame = document.getElementById('evFrame');
+    frame.addEventListener('load', () => {
+      try {
+        const doc = frame.contentDocument;
+        const style = doc.createElement('style');
+        style.textContent = `
+          html, body { width:100% !important; min-width:0 !important; max-width:none !important; }
+          body { width:100vw !important; justify-content:flex-start !important; }
+          .frame { width:100% !important; max-width:none !important; min-width:0 !important; }
+        `;
+        doc.head.appendChild(style);
+      } catch (e) {
+        console.error('E.V. mobile layout fix failed:', e);
+      }
+    });
+  </script>
+</body>
 </html>
