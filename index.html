@@ -4,22 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>E.V.</title>
-  <style>html,body{margin:0;width:100%;height:100%;background:#08090b;overflow:hidden;}iframe{display:block;width:100%;height:100%;border:0;}</style>
 </head>
-<body>
+<body style="margin:0;background:#08090b;">
 <script>
 (async function(){
   try{
-    const r=await fetch('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed%281%29.html?evfix=6',{cache:'no-store'});
-    if(!r.ok) throw new Error('E.V. file could not be loaded ('+r.status+')');
-    let html=await r.text();
-    html=html.replace(/\basync function\s*\n\s*\/\* ---------- Jarvis-style live weather ---------- \*\//,'/* ---------- Jarvis-style live weather ---------- */');
-    html=html.replace(/\basync sendMessage\(text, image\)\s*\{/,'async function sendMessage(text, image){');
-    if(!/<base\s/i.test(html)) html=html.replace(/<head>/i,'<head><base href="./">');
-    const frame=document.createElement('iframe');
-    frame.title='E.V.';
-    frame.srcdoc=html;
-    document.body.replaceChildren(frame);
+    const reg = await navigator.serviceWorker.register('./ev-fix-sw.js', { scope: './' });
+    await navigator.serviceWorker.ready;
+    location.replace('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html?evfix=7');
   }catch(e){
     document.body.innerHTML='<pre style="margin:20px;color:#9ff;font:14px monospace;white-space:pre-wrap">E.V. could not start. '+String(e.message||e)+'</pre>';
   }
