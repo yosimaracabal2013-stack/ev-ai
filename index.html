@@ -1,59 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>E.V.</title>
-  <style>
-    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#08090b; }
-    #evFrame { display:block; width:100%; height:100%; border:0; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>E.V.</title>
+<style>
+:root{--bg:#07090a;--panel:#0d1412;--line:#1e3a31;--green:#39e991;--dim:#6d887d;--text:#d9eee5}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--text);font-family:"SF Mono","Courier New",monospace}body{overflow:hidden}.app{width:100%;height:100dvh;min-height:100vh;display:flex;flex-direction:column}.top{flex:0 0 auto;border-bottom:1px solid var(--line);padding:calc(10px + env(safe-area-inset-top)) 14px 10px;display:flex;justify-content:space-between;align-items:center}.brand{color:var(--green);letter-spacing:3px;font-weight:700}.status{color:var(--dim);font-size:10px;text-align:right}.hero{flex:0 0 auto;text-align:center;padding:14px 10px 8px}h1{margin:0;color:#c8ffe6;letter-spacing:10px;font-size:18px}.sub{margin-top:5px;color:var(--dim);font-size:9px;letter-spacing:4px}.stats{display:flex;justify-content:center;gap:24px;padding:6px 10px 10px}.stat{text-align:center}.stat b{display:block;color:var(--green);font-size:12px}.stat span{color:var(--dim);font-size:8px;letter-spacing:1px}.controls{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;padding:0 10px 8px}.btn{background:transparent;border:1px solid var(--line);color:var(--dim);padding:7px 10px;font:10px inherit;letter-spacing:1px;border-radius:3px}.btn.on,.btn:hover{border-color:var(--green);color:var(--green)}.chat{flex:1;min-height:0;overflow:auto;padding:8px 12px 14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}.msg{max-width:min(88%,680px)}.msg.you{align-self:flex-end}.msg.ev{align-self:flex-start}.label{font-size:8px;color:var(--dim);letter-spacing:2px;margin-bottom:3px}.ev .label{color:#2a9c68}.bubble{padding:10px 12px;border:1px solid var(--line);background:var(--panel);font-size:13px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}.ev .bubble{border-left:2px solid #166b47;background:rgba(57,233,145,.045)}.composer{flex:0 0 auto;border-top:1px solid var(--line);padding:10px 10px calc(10px + env(safe-area-inset-bottom));display:flex;gap:7px;align-items:flex-end}textarea{flex:1;min-width:0;max-height:120px;resize:none;background:#0b0f0e;color:var(--text);border:1px solid var(--line);border-radius:3px;padding:10px;font:13px inherit;outline:none}textarea:focus{border-color:#2b8b64}.send{height:42px;border:1px solid var(--green);background:transparent;color:var(--green);padding:0 14px;font:11px inherit;letter-spacing:2px;border-radius:3px}.send:disabled{opacity:.35}.mic{width:42px;height:42px;border:1px solid var(--line);background:transparent;color:var(--dim);border-radius:3px;font-size:17px}.mic.on{color:#ff6262;border-color:#ff6262;animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.45}}.note{font-size:9px;color:var(--dim);text-align:center;padding:3px 10px}@media(max-width:430px){.stats{gap:16px}.top{padding-left:10px;padding-right:10px}h1{font-size:16px;letter-spacing:7px}.msg{max-width:94%}.bubble{font-size:12.5px}.send{padding:0 11px}}
+</style>
 </head>
 <body>
-  <iframe id="evFrame" title="E.V."></iframe>
-  <script>
-    (async function(){
-      const frame = document.getElementById('evFrame');
-      try {
-        const response = await fetch('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html?mobilefix=1', { cache: 'no-store' });
-        if(!response.ok) throw new Error('E.V. file could not be loaded (' + response.status + ')');
-        let html = await response.text();
-
-        // Fix the two syntax mistakes in the uploaded E.V. file before Safari parses it.
-        // 1) An accidental empty async-function declaration before the weather code.
-        html = html.replace(
-          /\nasync function\s*\n\/\* ---------- Jarvis-style live weather ---------- \*\//,
-          '\n/* ---------- Jarvis-style live weather ---------- */'
-        );
-        // 2) The message handler was written as "async sendMessage(...)" instead of
-        // "async function sendMessage(...)". Without this, the entire script fails to parse.
-        html = html.replace(
-          /\nasync sendMessage\(text, image\)\{/,
-          '\nasync function sendMessage(text, image){'
-        );
-
-        // Force the existing E.V. layout to use the full phone width instead of
-        // the 600px desktop frame that Safari was shrinking into the middle.
-        html = html.replace(/max-width:600px;/g, 'max-width:none;');
-        html = html.replace(
-          'display:flex;\n    justify-content:center;\n    overflow:hidden;',
-          'display:flex;\n    justify-content:flex-start;\n    width:100vw;\n    overflow:hidden;'
-        );
-        html = html.replace(
-          '</style>',
-          'html,body{width:100% !important;min-width:0 !important;max-width:none !important;} .frame{width:100vw !important;max-width:none !important;min-width:0 !important;}\n</style>'
-        );
-
-        // Write into same-origin about:blank so E.V. keeps its normal localStorage
-        // memory and existing integrations instead of getting an opaque srcdoc origin.
-        const doc = frame.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
-      } catch (error) {
-        document.body.innerHTML = '<pre style="margin:20px;color:#9ff;font:14px monospace;white-space:pre-wrap;">E.V. could not start. ' + String(error.message || error) + '</pre>';
-      }
-    })();
-  </script>
-</body>
-</html>
+<div class="app"><div class="top"><div class="brand">● E.V. CORE</div><div class="status" id="status">LINK ACTIVE<br><span id="clock">--:--</span></div></div><div class="hero"><h1>E V</h1><div class="sub">ALWAYS AROUND</div></div><div class="stats"><div class="stat"><b id="model">offline</b><span>CORE</span></div><div class="stat"><b id="voiceState">off</b><span>VOICE</span></div><div class="stat"><b id="agendaCount">0</b><span>AGENDA</span></div><div class="stat"><b id="memoryCount">0</b><span>MEMORY</span></div></div><div class="controls"><button class="btn" id="voiceBtn">VOICE OFF</button><button class="btn" id="weatherBtn">WEATHER</button><button class="btn" id="clearBtn">CLEAR CHAT</button></div><main class="chat" id="chat"></main><div class="note" id="note">Ready.</div><form class="composer" id="form"><button type="button" class="mic" id="micBtn" title="Speak">🎙️</button><textarea id="input" rows="1" placeholder="speak to ev..."></textarea><button class="send" id="send">SEND</button></form></div>
+<script>
+const $=id=>document.getElementById(id);const chat=$("chat"),input=$("input"),form=$("form"),send=$("send"),mic=$("micBtn");let history=[];let voiceOn=false;let recognition=null;let silenceTimer=null;let weather=null;const MODEL="openai/gpt-oss-120b";const BASE=`You are E.V., a friendly Jarvis-style personal AI. Be concise, natural, helpful and honest. You can use the live time and weather context supplied by the page. Never claim an action happened unless the page actually performed it.`;
+function save(){try{localStorage.setItem("ev-history",JSON.stringify(history.slice(-80)))}catch(e){}}function load(){try{history=JSON.parse(localStorage.getItem("ev-history")||"[]");if(!Array.isArray(history))history=[]}catch(e){history=[]}}function add(role,text){const d=document.createElement("div");d.className="msg "+(role==="user"?"you":"ev");d.innerHTML='<div class="label">'+(role==="user"?"YOU":"E.V.")+"</div><div class="bubble"></div>";d.querySelector(".bubble").textContent=text;chat.appendChild(d);chat.scrollTop=chat.scrollHeight}function render(){chat.innerHTML="";history.forEach(m=>{if(m.role==="user"||m.role==="assistant")add(m.role==="assistant"?"assistant":"user",typeof m.content==="string"?m.content:"")});$("memoryCount").textContent=history.filter(m=>m.role==="user").length}function tick(){const d=new Date();$("clock").textContent=d.toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});return d}setInterval(tick,1000);tick();
+async function getWeather(){if(weather&&Date.now()-weather.at<600000)return weather;if(!navigator.geolocation)throw Error("Location is unavailable.");const p=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{timeout:10000,maximumAge:600000}));const u=`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`;const r=await fetch(u);if(!r.ok)throw Error("Weather service error "+r.status);const j=await r.json();const names={0:"clear",1:"mostly clear",2:"partly cloudy",3:"overcast",45:"fog",48:"fog",51:"drizzle",53:"drizzle",55:"heavy drizzle",61:"light rain",63:"rain",65:"heavy rain",71:"light snow",73:"snow",75:"heavy snow",80:"showers",81:"showers",82:"heavy showers",95:"thunderstorm",96:"thunderstorm",99:"thunderstorm"};weather={at:Date.now(),temp:j.current.temperature_2m,feels:j.current.apparent_temperature,wind:j.current.wind_speed_10m,humidity:j.current.relative_humidity_2m,condition:names[j.current.weather_code]||"current conditions",timezone:j.timezone};return weather}
+function timeContext(){return `CURRENT LOCAL TIME: ${new Date().toString()}`}async function contextFor(text){let c=timeContext();if(/\b(weather|temperature|hot|cold|rain|snow|wind|humidity|forecast)\b/i.test(text)){try{const w=await getWeather();c+=`\nLIVE WEATHER: ${w.temp}°F, feels like ${w.feels}°F, ${w.condition}, humidity ${w.humidity}%, wind ${w.wind} mph, timezone ${w.timezone}.`;$('note').textContent="Weather updated."}catch(e){c+="\nLIVE WEATHER: unavailable; do not invent weather data."}}return c}
+async function ask(text){let key=(localStorage.getItem("ev-groq-api-key")||"").trim();if(!key){const entered=prompt("Paste your Groq API key for E.V. (stored only in this browser):");if(!entered)return "I need the Groq API key to use my main brain.";localStorage.setItem("ev-groq-api-key",entered.trim());key=entered.trim()}const msgs=[{role:"system",content:BASE+"\n"+await contextFor(text)},...history.filter(m=>m.role==="user"||m.role==="assistant").slice(-30),{role:"user",content:text}];const r=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model:MODEL,messages:msgs,max_completion_tokens:900,temperature:.7})});if(!r.ok)throw Error("Groq request failed: "+r.status);const j=await r.json();return j.choices?.[0]?.message?.content||"(no response)"}
+async function sendText(text){if(!text)return;add("user",text);history.push({role:"user",content:text});save();send.disabled=true;$("note").textContent="thinking...";try{const reply=await ask(text);add("assistant",reply);history.push({role:"assistant",content:reply});save();$("model").textContent="groq";$("note").textContent="Ready.";if(voiceOn)speak(reply)}catch(e){add("assistant","I couldn't reach my main brain right now. "+e.message);$("note").textContent="Connection unavailable."}finally{send.disabled=false}}
+form.addEventListener("submit",e=>{e.preventDefault();const t=input.value.trim();input.value="";input.style.height="auto";sendText(t)});input.addEventListener("input",()=>{input.style.height="auto";input.style.height=Math.min(input.scrollHeight,120)+"px"});input.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});function speak(t){if(!("speechSynthesis"in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.rate=.98;speechSynthesis.speak(u)}
+$("voiceBtn").onclick=()=>{voiceOn=!voiceOn;$("voiceBtn").classList.toggle("on",voiceOn);$("voiceBtn").textContent=voiceOn?"VOICE ON":"VOICE OFF";$("voiceState").textContent=voiceOn?"on":"off"};$("weatherBtn").onclick=async()=>{try{const w=await getWeather();add("assistant",`Weather: ${w.temp}°F (feels ${w.feels}°F), ${w.condition}, humidity ${w.humidity}%, wind ${w.wind} mph.`)}catch(e){add("assistant","I couldn't get your weather. Please allow location access and try again.")}};$("clearBtn").onclick=()=>{history=[];save();render();add("assistant","Chat cleared. I'm ready.")};function stopListening(){if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null}try{recognition?.stop()}catch(e){}mic.classList.remove("on");$("note").textContent="Ready."}function autoSend(){const t=input.value.trim();if(!t)return;stopListening();input.value="";input.style.height="auto";sendText(t)}
+if(window.SpeechRecognition||window.webkitSpeechRecognition){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;recognition=new SR();recognition.lang="en-US";recognition.continuous=true;recognition.interimResults=true;recognition.onstart=()=>{mic.classList.add("on");$("note").textContent="Listening... stop talking to send."};recognition.onresult=e=>{let s="";for(let i=0;i<e.results.length;i++)s+=e.results[i][0].transcript;input.value=s.trim();input.style.height="auto";input.style.height=Math.min(input.scrollHeight,120)+"px";if(s.trim()){if(silenceTimer)clearTimeout(silenceTimer);silenceTimer=setTimeout(autoSend,1300)}};recognition.onerror=()=>stopListening();recognition.onend=()=>{if(mic.classList.contains("on"))try{recognition.start()}catch(e){}};mic.onclick=()=>{if(mic.classList.contains("on"))stopListening();else try{recognition.start()}catch(e){}}}else{mic.disabled=true}load();render();if(!history.length)add("assistant","Hey, it's E.V. What's going on?");
+</script></body></html>
