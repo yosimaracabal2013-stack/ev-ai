@@ -10,15 +10,13 @@
 <script>
 (async function(){
   try{
-    const r=await fetch('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed%281%29.html?evfix=3',{cache:'no-store'});
+    const r=await fetch('./EV-New-Memory-Fixed-iPhone-Zoom-Time-Weather-Spotify-Fixed%281%29.html?evfix=4',{cache:'no-store'});
     if(!r.ok) throw new Error('E.V. file could not be loaded ('+r.status+')');
     let html=await r.text();
-    // Fix only the two existing syntax errors; do not change E.V.'s design.
+    // Repair the syntax errors in the original E.V. file only.
     html=html.replace(/\nasync function\s*\n\/\* ---------- Jarvis-style live weather ---------- \*\//,'\n/* ---------- Jarvis-style live weather ---------- */');
     html=html.replace(/\nasync sendMessage\(text, image\)\{/,'\nasync function sendMessage(text, image){');
-    // Keep the original design while allowing it to fill an iPhone screen.
-    html=html.replace(/max-width:600px;/g,'max-width:none;');
-    html=html.replace('justify-content:center;\n    overflow:hidden;','justify-content:flex-start;\n    width:100vw;\n    overflow:hidden;');
+    // Do not alter E.V.'s original design, layout, colors, or sizing.
     document.open();
     document.write(html);
     document.close();
