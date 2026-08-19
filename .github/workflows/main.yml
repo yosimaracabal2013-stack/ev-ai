@@ -34,14 +34,15 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html')
           s = p.read_text(encoding='utf-8')
-          bad = 'async function \n/* ---------- Jarvis-style live weather ---------- */'
-          good = '/* ---------- Jarvis-style live weather ---------- */'
+          bad = """async function
+/* ---------- Jarvis-style live weather ---------- */"""
+          good = "/* ---------- Jarvis-style live weather ---------- */"
           if bad in s:
               s = s.replace(bad, good, 1)
           else:
-              import re
               s = re.sub(r'async function\\s*/\\*\\s*-{10}\\s*Jarvis-style live weather\\s*-{10}\\s*\\*/', good, s, count=1)
           p.write_text(s, encoding='utf-8')
           print('E.V. boot syntax check/fix complete')
