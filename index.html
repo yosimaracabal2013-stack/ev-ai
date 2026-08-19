@@ -4,46 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>E.V.</title>
-  <style>
-    html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#08090b; }
-    #evFrame { display:block; width:100%; height:100%; border:0; }
-  </style>
 </head>
 <body>
-  <iframe id="evFrame" title="E.V."></iframe>
-  <script>
-    (async function(){
-      const frame = document.getElementById('evFrame');
-      try {
-        const response = await fetch('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html?mobilefix=1', { cache: 'no-store' });
-        if(!response.ok) throw new Error('E.V. file could not be loaded (' + response.status + ')');
-        let html = await response.text();
-
-        // Keep E.V.'s original design and behavior; only remove the stray syntax error.
-        html = html.replace(
-          /\nasync function\s*\n\/\* ---------- Jarvis-style live weather ---------- \*\//,
-          '\n/* ---------- Jarvis-style live weather ---------- */'
-        );
-
-        // iPhone layout fix only: do not redesign the existing E.V. interface.
-        html = html.replace(/max-width:600px;/g, 'max-width:none;');
-        html = html.replace(
-          'display:flex;\n    justify-content:center;\n    overflow:hidden;',
-          'display:flex;\n    justify-content:flex-start;\n    width:100vw;\n    overflow:hidden;'
-        );
-        html = html.replace(
-          '</style>',
-          'html,body{width:100% !important;min-width:0 !important;max-width:none !important;} .frame{width:100vw !important;max-width:none !important;min-width:0 !important;}\n</style>'
-        );
-
-        const doc = frame.contentWindow.document;
-        doc.open();
-        doc.write(html);
-        doc.close();
-      } catch (error) {
-        document.body.innerHTML = '<pre style="margin:20px;color:#9ff;font:14px monospace;white-space:pre-wrap;">E.V. could not start. ' + String(error.message || error) + '</pre>';
-      }
-    })();
-  </script>
+<script>
+  // Open E.V.'s actual HTML file directly. This preserves her original UI,
+  // scripts, localStorage, voice, memory, time, weather, and Spotify code.
+  location.replace('./EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed%281%29.html');
+</script>
 </body>
 </html>
