@@ -19,11 +19,17 @@
         if(!response.ok) throw new Error('E.V. file could not be loaded (' + response.status + ')');
         let html = await response.text();
 
-        // Fix the accidental empty async-function declaration that prevents the
-        // rest of E.V.'s JavaScript from parsing.
+        // Fix the two syntax mistakes in the uploaded E.V. file before Safari parses it.
+        // 1) An accidental empty async-function declaration before the weather code.
         html = html.replace(
           /\nasync function\s*\n\/\* ---------- Jarvis-style live weather ---------- \*\//,
           '\n/* ---------- Jarvis-style live weather ---------- */'
+        );
+        // 2) The message handler was written as "async sendMessage(...)" instead of
+        // "async function sendMessage(...)". Without this, the entire script fails to parse.
+        html = html.replace(
+          /\nasync sendMessage\(text, image\)\{/,
+          '\nasync function sendMessage(text, image){'
         );
 
         // Force the existing E.V. layout to use the full phone width instead of
