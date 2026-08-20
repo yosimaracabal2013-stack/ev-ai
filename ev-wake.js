@@ -22,6 +22,7 @@
   function normalize(s){
     return String(s||'')
       .toLowerCase()
+      .replace(/[’‘]/g,"'")
       .replace(/[.,!?;:]/g,' ')
       .replace(/\be\s*[.]?\s*v\s*[.]?\b/g,' ev ')
       .replace(/\s+/g,' ')
@@ -29,10 +30,6 @@
   }
   function stripWake(s){
     return normalize(s).replace(/^(?:hey\s+)?e\s*v(?:\s+please)?(?:\s*[-,:])?\s*/i,'').trim();
-  }
-  function isWake(text){
-    const n=normalize(text);
-    return /^(?:hey\s+)?e\s*v$/.test(n)||/^(?:hey\s+)?e\s*v\s+(?:please\s+)?(?:wake|wake up|listen|are you there)\b/.test(n);
   }
   function canRecognize(){ return !!Recognition; }
 
@@ -51,11 +48,10 @@
       return;
     }
 
-    if(/^(?:what(?:'s| is)\s+)?(?:on )?the agenda\??$/.test(command) || /^what(?:'s| is) on my agenda\??$/.test(command)){
+    if(/^(?:(?:what(?:'s| is)\s+)?(?:on )?the agenda|what(?:'s| is) on my agenda)\??$/.test(command)){
       try{
-        if(typeof agendaContext==='function' && typeof window.EVSend==='function'){
-          await window.EVSend("What's on my agenda?");
-        }else say('I can answer that once my main connection is ready.');
+        if(typeof window.EVSend==='function') await window.EVSend("What's on my agenda?");
+        else say('I can answer that once my main connection is ready.');
       }catch(_){ say('I could not reach my agenda right now.'); }
       return;
     }
@@ -144,12 +140,11 @@
     try{saved=localStorage.getItem(KEY)==='true';}catch(_){}
     if(saved && Recognition){
       armed=true;
-      // If the browser has already granted microphone access, try immediately.
       startRecognition();
     }
   }
 
-  // Browsers such as iPhone Safari require a user gesture before microphone use.
+  // iPhone Safari requires a user gesture before microphone use.
   // The first tap/click anywhere on E.V. arms the listener without adding UI.
   document.addEventListener('pointerdown',function(){arm();},{once:true,capture:true});
   document.addEventListener('click',function(){arm();},{once:true,capture:true});
