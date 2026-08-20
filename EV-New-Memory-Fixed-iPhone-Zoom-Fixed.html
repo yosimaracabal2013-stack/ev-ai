@@ -66,6 +66,9 @@ frame.addEventListener('load',()=>{
     const s=doc.createElement('script');
     s.textContent=PATCH;
     doc.body.appendChild(s);
+    const features=doc.createElement('script');
+    features.src='./ev-features.js?v=1';
+    doc.body.appendChild(features);
   }catch(e){ console.error('E.V. patch injection failed',e); }
 });
 </script>
