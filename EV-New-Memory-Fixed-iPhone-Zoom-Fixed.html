@@ -10,196 +10,87 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 </head>
 <body>
 <div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
-  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=7" title="E.V."></iframe>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=9" title="E.V."></iframe>
 </div>
 <script>
 'use strict';
-
 const frame=document.getElementById('evFrame');
-
 frame.addEventListener('load',()=>{
   try{
-    const win=frame.contentWindow;
-    const doc=frame.contentDocument;
+    const win=frame.contentWindow, doc=frame.contentDocument;
+    const input=doc.getElementById('input'), send=doc.getElementById('send'), form=doc.getElementById('composer');
     win.__evSafeBusy=false;
-
-    /* Keep E.V.'s original design. Remove voice UI only. */
     const style=doc.createElement('style');
-    style.id='ev-no-voice-style';
-    style.textContent=`
-      #voiceBtn,#voiceSelect,#micBtn,.controls-row:has(#voiceBtn),.controls-row:has(#voiceSelect){display:none!important;visibility:hidden!important;pointer-events:none!important;}
-    `;
+    style.textContent='#voiceBtn,#voiceSelect,#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}.controls-row:has(#voiceBtn),.controls-row:has(#voiceSelect){display:none!important}';
     doc.head.appendChild(style);
-
-    const removeVoice=()=>{
-      ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{
-        const el=doc.getElementById(id);
-        if(el) el.remove();
-      });
-      doc.querySelectorAll('.controls-row').forEach(row=>{
-        if(!row.textContent.trim()) row.remove();
-      });
-      try{if(win.speechSynthesis)win.speechSynthesis.cancel();}catch(_){}
-    };
+    const removeVoice=()=>['voiceBtn','voiceSelect','micBtn'].forEach(id=>{const e=doc.getElementById(id);if(e)e.remove();});
     removeVoice();
-    const observer=new MutationObserver(removeVoice);
-    observer.observe(doc.documentElement,{subtree:true,childList:true});
 
-    const safeClip=(value,n)=>String(value||'').slice(-n);
-    const textOf=(value)=>{
-      if(typeof value==='string') return value;
-      if(Array.isArray(value)) return value.map(part=>{
-        if(part&&part.type==='text') return part.text||'';
-        if(part&&(part.type==='image'||part.type==='image_url')) return '[photo attached]';
-        return '';
-      }).filter(Boolean).join('\n')||'[attachment]';
-      return '';
+    const textOf=v=>typeof v==='string'?v:Array.isArray(v)?v.map(x=>x&&x.type==='text'?x.text||'':'').join('\n'):'';
+    const clip=(v,n)=>String(v||'').slice(-n);
+    const getKey=()=>{
+      let k='';
+      try{if(typeof win.getGroqApiKey==='function')k=win.getGroqApiKey()||'';}catch(_){}
+      if(!k)try{k=win.localStorage.getItem('ev-groq-api-key')||'';}catch(_){}
+      if(!k)try{k=win.localStorage.getItem('groq-api-key')||'';}catch(_){}
+      return k;
     };
-
-    async function requestGroq(messages,maxTokens){
-      const key=typeof win.getGroqApiKey==='function'
-        ? win.getGroqApiKey()
-        : (win.localStorage.getItem('ev-groq-api-key')||'');
-      if(!key) throw Object.assign(new Error('Groq API key is missing.'),{status:401});
-
-      const controller=new AbortController();
-      const timer=setTimeout(()=>controller.abort(),15000);
-      let response;
+    async function groq(messages){
+      let key=getKey();
+      if(!key){key=prompt('Enter E.V. Groq API key:')||'';if(key)try{win.localStorage.setItem('ev-groq-api-key',key.trim());}catch(_){} }
+      if(!key)throw Object.assign(new Error('E.V. needs her Groq API key.'),{status:401});
+      const c=new AbortController(), timer=setTimeout(()=>c.abort(),15000);
       try{
-        response=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-          method:'POST',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-          signal:controller.signal,
-          body:JSON.stringify({
-            model:'openai/gpt-oss-120b',
-            messages,
-            max_completion_tokens:maxTokens,
-            temperature:0.7
-          })
+        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+          method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key.trim()},signal:c.signal,
+          body:JSON.stringify({model:'openai/gpt-oss-120b',messages,max_completion_tokens:220,temperature:.7})
         });
-      }catch(err){
-        if(err?.name==='AbortError') throw Object.assign(new Error('Groq request timed out.'),{status:408});
-        throw err;
-      }finally{
-        clearTimeout(timer);
-      }
-
-      const raw=await response.text().catch(()=> '');
-      if(!response.ok){
-        const err=new Error('Groq '+response.status+(raw?' — '+raw:''));
-        err.status=response.status;
-        const retryAfter=Number(response.headers.get('retry-after')||0);
-        if(retryAfter>0) err.retryAfterMs=retryAfter*1000;
-        throw err;
-      }
-      try{return JSON.parse(raw);}catch(_){
-        throw Object.assign(new Error('Groq returned an invalid response.'),{status:502});
-      }
+        const raw=await r.text();
+        if(!r.ok){const e=new Error('Groq '+r.status);e.status=r.status;e.raw=raw;throw e;}
+        return JSON.parse(raw);
+      }catch(e){if(e.name==='AbortError')throw Object.assign(new Error('E.V. timed out.'),{status:408});throw e;}
+      finally{clearTimeout(timer);}
     }
-
-    function compactMessages(currentText){
+    function makeMessages(current){
+      let system='You are E.V., a warm, helpful personal AI assistant. Reply naturally and concisely. Never claim an action happened if it did not.';
+      try{if(typeof win.BASE_SYSTEM_PROMPT==='string')system=clip(win.BASE_SYSTEM_PROMPT,2200);}catch(_){}
+      const out=[{role:'system',content:clip(system,2600)}];
       const h=Array.isArray(win.history)?win.history:[];
-      let system='You are E.V., a warm, helpful personal AI assistant. Reply naturally and concisely. Never pretend an action happened if it did not.';
-      try{if(typeof win.BASE_SYSTEM_PROMPT==='string')system=safeClip(win.BASE_SYSTEM_PROMPT,1800);}catch(_){}
-      try{if(typeof win.timeContext==='function')system+='\n\n'+safeClip(win.timeContext(),350);}catch(_){}
-      try{if(typeof win.agendaContext==='function')system+='\n\n'+safeClip(win.agendaContext(),450);}catch(_){}
-      try{if(typeof win.memoryContext==='function')system+='\n\n'+safeClip(win.memoryContext(),550);}catch(_){}
-      try{if(typeof win.adjustmentsContext==='function')system+='\n\n'+safeClip(win.adjustmentsContext(),300);}catch(_){}
-
-      const messages=[{role:'system',content:safeClip(system,3200)}];
       const recent=[];
-      for(let i=h.length-1;i>=0&&recent.length<4;i--){
-        const m=h[i];
-        if(!m||(m.role!=='user'&&m.role!=='assistant'))continue;
-        const content=safeClip(textOf(m.content).trim(),350);
-        if(content)recent.unshift({role:m.role,content});
-      }
-      const current=safeClip(currentText,350);
-      if(!recent.length||recent[recent.length-1].role!=='user'||recent[recent.length-1].content!==current){
-        recent.push({role:'user',content:current});
-      }
-      for(const m of recent)messages.push(m);
-      return messages;
+      for(let i=h.length-1;i>=0&&recent.length<5;i--){const m=h[i];if(!m||(m.role!=='user'&&m.role!=='assistant'))continue;const c=clip(textOf(m.content).trim(),300);if(c)recent.unshift({role:m.role,content:c});}
+      if(!recent.length||recent[recent.length-1].role!=='user'||recent[recent.length-1].content!==current)recent.push({role:'user',content:clip(current,350)});
+      return out.concat(recent);
     }
+    function addUser(text){try{if(typeof win.addRow==='function')win.addRow('user',text);}catch(_){} }
+    function addEv(text){try{return typeof win.addRow==='function'?win.addRow('ev',text):null;}catch(_){return null;}}
 
     async function safeSend(text){
-      const message=String(text||'').trim();
-      if(!message||win.__evSafeBusy)return;
+      text=String(text||'').trim();
+      if(!text||win.__evSafeBusy)return;
       win.__evSafeBusy=true;
-      const send=doc.getElementById('send');
-      const input=doc.getElementById('input');
       if(send)send.disabled=true;
-
-      if(!Array.isArray(win.history))win.history=[];
-      win.history.push({role:'user',content:message});
-      let bubble=null;
+      if(input)input.value='';
+      addUser(text);
+      let bubble=addEv('Thinking…');
+      if(bubble)bubble.classList.add('thinking');
       try{
-        win.vizState='thinking';
-        bubble=typeof win.addThinkingRow==='function'?win.addThinkingRow():null;
-
         let data;
-        try{
-          data=await requestGroq(compactMessages(message),220);
-        }catch(first){
-          if(first?.status===413){
-            data=await requestGroq([
-              {role:'system',content:'You are E.V. Reply briefly and directly. No extra formatting.'},
-              {role:'user',content:safeClip(message,220)}
-            ],90);
-          }else if(first?.status===429){
-            const wait=Math.min(Math.max(first.retryAfterMs||2500,1500),8000);
-            await new Promise(r=>setTimeout(r,wait));
-            data=await requestGroq([
-              {role:'system',content:'You are E.V. Reply briefly and directly.'},
-              {role:'user',content:safeClip(message,220)}
-            ],90);
-          }else throw first;
+        try{data=await groq(makeMessages(text));}
+        catch(e){
+          if(e.status===413){data=await groq([{role:'system',content:'You are E.V. Reply briefly and directly.'},{role:'user',content:clip(text,220)}]);}
+          else throw e;
         }
-
-        const raw=data?.choices?.[0]?.message?.content||'(no response)';
-        let reply=String(raw).trim();
-        try{
-          reply=win.extractSimulationTags(
-            win.extractProposalTags(
-              win.extractMemoryTags(reply,doc.getElementById('log')),
-              doc.getElementById('log')
-            ),
-            doc.getElementById('log')
-          );
-        }catch(_){}
-
-        if(bubble){
-          bubble.classList.remove('thinking');
-          bubble.innerHTML=typeof win.linkify==='function'
-            ?win.linkify(reply)
-            :reply.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-        }
-        win.history.push({role:'assistant',content:reply});
-        try{
-          if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')
-            await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));
-        }catch(_){}
-        try{win.linkStatus.textContent='LINK ACTIVE';}catch(_){}
-        try{win.statModel.textContent='gpt-oss-120b';}catch(_){}
-        try{if(typeof win.buildTicker==='function')win.buildTicker();}catch(_){}
+        const reply=String(data?.choices?.[0]?.message?.content||'No response.').trim();
+        if(bubble){bubble.classList.remove('thinking');bubble.textContent=reply;}
+        else addEv(reply);
+        if(Array.isArray(win.history)){win.history.push({role:'user',content:text},{role:'assistant',content:reply});}
+        try{if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));}catch(_){}
         try{win.vizState='idle';}catch(_){}
         try{if(typeof win.scrollToEnd==='function')win.scrollToEnd();}catch(_){}
-      }catch(err){
-        console.error('E.V. fixed sender error',err);
-        if(bubble){
-          bubble.classList.remove('thinking');
-          const status=err?.status||'network';
-          bubble.textContent=status===401
-            ?'E.V. needs her Groq API key. Enter it when prompted.'
-            :status===408
-              ?'E.V. timed out reaching Groq. Try that message again.'
-              :status===429
-                ?'Groq is temporarily rate-limiting E.V. Try again in a few seconds.'
-                :status===413
-                  ?'E.V. request was too large. The old chat was not sent.'
-                  :'E.V. connection failed ('+status+'). Try that message again.';
-        }
-        try{win.vizState='idle';}catch(_){}
+      }catch(e){
+        console.error('E.V. sender:',e);
+        const msg=e.status===401?'E.V. needs her Groq API key.':e.status===408?'E.V. timed out. Try again.':e.status===429?'Groq is rate-limiting E.V. Try again in a few seconds.':e.status===413?'That message was too large. Try a shorter message.':'E.V. connection failed ('+(e.status||'network')+'). Try again.';
+        if(bubble){bubble.classList.remove('thinking');bubble.textContent=msg;}else addEv(msg);
       }finally{
         win.__evSafeBusy=false;
         if(send)send.disabled=false;
@@ -208,35 +99,19 @@ frame.addEventListener('load',()=>{
       }
     }
 
-    /* Capture submit before the original handler. This keeps the original
-       visual design but prevents its broken sender from running. */
-    const form=doc.getElementById('composer');
-    if(form){
-      form.addEventListener('submit',(e)=>{
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const input=doc.getElementById('input');
-        const text=input?input.value.trim():'';
-        if(!text)return;
-        if(typeof win.addRow==='function')win.addRow('user',text,null,null);
-        if(input){input.value='';input.style.height='auto';}
-        safeSend(text);
-      },true);
-    }
-
-    doc.addEventListener('click',(e)=>{
-      const t=e.target;
-      if(t&&(t.id==='micBtn'||t.id==='voiceBtn')){
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        removeVoice();
-      }
+    /* IMPORTANT: the old page has its own click/submit sender. Intercept the
+       SEND click and Enter key BEFORE that handler so it cannot lock the UI. */
+    if(send)send.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();safeSend(input?input.value:'');},true);
+    if(form)form.addEventListener('submit',e=>{e.preventDefault();e.stopImmediatePropagation();safeSend(input?input.value:'');},true);
+    if(input)input.addEventListener('keydown',e=>{
+      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.stopImmediatePropagation();safeSend(input.value);}
     },true);
-
+    doc.addEventListener('click',e=>{
+      const t=e.target;
+      if(t&&(t.id==='micBtn'||t.id==='voiceBtn')){e.preventDefault();e.stopImmediatePropagation();removeVoice();}
+    },true);
     removeVoice();
-  }catch(err){
-    console.error('E.V. patch failed',err);
-  }
+  }catch(err){console.error('E.V. patch failed',err);}
 });
 </script>
 </body>
