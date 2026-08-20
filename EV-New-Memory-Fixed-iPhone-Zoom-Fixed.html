@@ -13,189 +13,185 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
   <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html" title="E.V."></iframe>
 </div>
 <script>
-const PATCH = String.raw`(function(){
 'use strict';
 
-/* E.V. stable text-chat patch:
-   - removes all voice controls and speech hooks
-   - keeps weather, agenda, memory, homework, music and other features
-   - keeps the original visual design
-   - sends only a small recent conversation window to Groq so old chat cannot cause 413 errors
-*/
-
-function removeVoiceUI(){
-  try{
-    ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.remove();
-    });
-    const stat=document.getElementById('statVoice');
-    if(stat) stat.textContent='off';
-    const label=document.getElementById('voiceLabel');
-    if(label) label.textContent='voice off';
-    try{ localStorage.setItem('ev-voiceEnabled','false'); }catch(_){}
-    try{ if(window.speechSynthesis) window.speechSynthesis.cancel(); }catch(_){}
-    try{ window.voiceEnabled=false; }catch(_){}
-    try{ window.speak=function(){}; }catch(_){}
-    try{ window.EVWake={supported:()=>false,enabled:()=>false,enable:()=>false,disable:()=>{},restart:()=>{}}; }catch(_){}
-  }catch(_){}
-}
-
-function textOf(c){
-  if(typeof c==='string') return c;
-  if(Array.isArray(c)) return c.map(x=>x&&x.type==='text'?x.text||'':x&&(x.type==='image'||x.type==='image_url')?'[photo attached]':'').filter(Boolean).join('\\n')||'[attachment]';
-  return '';
-}
-function clip(s,n){s=String(s||'');return s.length>n?s.slice(-n):s;}
-
-function safeMessages(systemPrompt,currentText){
-  const out=[{role:'system',content:clip(systemPrompt,1800)}];
-  const recent=[];
-  for(let i=history.length-1;i>=0 && recent.length<4;i--){
-    const m=history[i];
-    if(m.role!=='user'&&m.role!=='assistant') continue;
-    const content=clip(textOf(m.content).trim(),600);
-    if(content) recent.unshift({role:m.role,content});
-  }
-  const current=clip(currentText,700);
-  if(recent.length && recent[recent.length-1].role==='user' && recent[recent.length-1].content===current) recent.pop();
-  for(const m of recent){
-    const last=out[out.length-1];
-    if(last.role===m.role) last.content+='\\n'+m.content;
-    else out.push(m);
-  }
-  out.push({role:'user',content:current});
-  return out;
-}
-
-async function groqRequest(key,messages,maxTokens){
-  const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({
-      model:GROQ_MODEL,
-      messages,
-      max_completion_tokens:maxTokens,
-      temperature:.7,
-      reasoning_effort:'low',
-      include_reasoning:false
-    })
-  });
-  const raw=await res.text().catch(()=> '');
-  if(!res.ok){const e=new Error('Groq '+res.status+(raw?' — '+raw:''));e.status=res.status;throw e;}
-  return JSON.parse(raw);
-}
-
-async function safeCall(systemPrompt,currentText){
-  const key=getGroqApiKey();
-  if(!key) throw new Error('Groq API key is missing');
-  try{
-    return await groqRequest(key,safeMessages(systemPrompt,currentText),600);
-  }catch(firstErr){
-    /* If the provider rejects the payload as too large, retry with only the
-       current message and a tiny system prompt. This prevents old memory/chat
-       from taking E.V. down. */
-    if(firstErr && (firstErr.status===413||firstErr.status===400||firstErr.status===422)){
-      const compactSystem=clip(BASE_SYSTEM_PROMPT,900)+'\\n'+clip(timeContext(),500)+'\\n'+clip(memoryContext(),700)+'\\n'+clip(agendaContext(),500);
-      return await groqRequest(key,[
-        {role:'system',content:compactSystem},
-        {role:'user',content:clip(currentText,500)}
-      ],500);
-    }
-    throw firstErr;
-  }
-}
-
-let busy=false;
-const form=document.getElementById('composer');
-const input=document.getElementById('input');
-const sendBtn=document.getElementById('send');
-const log=document.getElementById('log');
-if(!form||!input||!sendBtn||!log) return;
-
-async function safeSend(text){
-  if(busy)return;
-  busy=true;
-  sendBtn.disabled=true;
-  history.push({role:'user',content:text});
-  const bubble=addThinkingRow();
-  try{
-    const ctx=BASE_SYSTEM_PROMPT+'\\n\\n'+timeContext()+'\\n\\n'+agendaContext()+'\\n\\n'+memoryContext()+'\\n\\n'+adjustmentsContext();
-    const data=await safeCall(ctx,text);
-    const raw=data?.choices?.[0]?.message?.content||'(no response)';
-    const reply=extractSimulationTags(extractProposalTags(extractMemoryTags(raw.trim()),log),log);
-    bubble.classList.remove('thinking');
-    bubble.innerHTML=linkify(reply);
-    history.push({role:'assistant',content:reply});
-    storageSet('ev-history',sanitizeHistoryForStorage(history));
-    scrollToEnd();
-  }catch(err){
-    console.error(err);
-    bubble.classList.remove('thinking');
-    if(err?.status===429) bubble.textContent='E.V. is being rate-limited for a moment. Wait a few seconds and try again.';
-    else if(err?.status===413) bubble.textContent='E.V. rejected the request as too large. The short-message retry also failed, so no old chat was sent.';
-    else bubble.textContent='E.V. connection failed ('+(err?.status||'network')+'). Your message is still in the chat.';
-    scrollToEnd();
-  }finally{
-    busy=false;
-    sendBtn.disabled=false;
-    input.focus();
-    removeVoiceUI();
-  }
-}
-
-/* Capture the submit before the original page and feature scripts so only
-   this stable sender handles chat messages. */
-form.addEventListener('submit',function(e){
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  const text=input.value.trim();
-  if(!text||busy)return;
-  addRow('user',text);
-  input.value='';
-  input.style.height='auto';
-  safeSend(text);
-},true);
-
-removeVoiceUI();
-setTimeout(removeVoiceUI,50);
-setTimeout(removeVoiceUI,500);
-setInterval(removeVoiceUI,1500);
-})();`;
-
 const frame=document.getElementById('evFrame');
+
 frame.addEventListener('load',()=>{
   try{
+    const win=frame.contentWindow;
     const doc=frame.contentDocument;
 
-    /* Hard-remove voice controls from the existing DOM instead of changing
-       the rest of E.V.'s design. */
+    /* Keep the original E.V. appearance, but completely disable voice. */
     const style=doc.createElement('style');
-    style.textContent=`#voiceBtn,#voiceSelect,#micBtn{display:none!important;width:0!important;min-width:0!important;max-width:0!important;visibility:hidden!important;pointer-events:none!important;} #statVoice{font-size:0!important;} #statVoice::after{content:'off';font-size:inherit;}`;
+    style.textContent=`
+      #voiceBtn,#voiceSelect,#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important;width:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;}
+      #statVoice{font-size:0!important;}
+      #statVoice::after{content:'off';font-size:10.5px;}
+      #input{min-width:0;}
+    `;
     doc.head.appendChild(style);
 
-    const disable=doc.createElement('script');
-    disable.textContent=`(function(){
-      try{
-        try{localStorage.setItem('ev-voiceEnabled','false')}catch(_){}
-        if(window.speechSynthesis){try{window.speechSynthesis.cancel()}catch(_){};try{window.speechSynthesis.speak=function(){}}catch(_){}}
-        try{window.speak=function(){}}catch(_){}
-        try{window.voiceEnabled=false}catch(_){}
-        try{window.EVWake={supported:()=>false,enabled:()=>false,enable:()=>false,disable:()=>{},restart:()=>{}}}catch(_){}
-        ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove()});
-        const sv=document.getElementById('statVoice');if(sv)sv.textContent='off';
-      }catch(_){}
-    })();`;
-    doc.body.appendChild(disable);
+    const disableVoice=()=>{
+      try{win.voiceEnabled=false;}catch(_){}
+      try{win.localStorage.setItem('ev-voiceEnabled','false');}catch(_){}
+      try{if(win.speechSynthesis) win.speechSynthesis.cancel();}catch(_){}
+      try{win.speak=function(){};}catch(_){}
+      try{if(win.recognizer&&win.listening) win.recognizer.stop();}catch(_){}
+      ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{const el=doc.getElementById(id);if(el)el.remove();});
+      const stat=doc.getElementById('statVoice'); if(stat) stat.textContent='off';
+      try{if(typeof win.refreshSysStats==='function')win.refreshSysStats();}catch(_){}
+    };
 
+    disableVoice();
+    setTimeout(disableVoice,100);
+    setTimeout(disableVoice,500);
+    setInterval(disableVoice,2000);
+
+    /*
+      Replace only E.V.'s network sender. The original visual design,
+      memory, agenda, weather/features and all other UI stay intact.
+      The old sender was sending the entire saved conversation to Groq,
+      which could hit Groq's 8K TPM free-plan limit and return HTTP 413.
+    */
+    const safeClip=(value,n)=>String(value||'').slice(-n);
+    const textOf=(value)=>{
+      if(typeof value==='string') return value;
+      if(Array.isArray(value)) return value.map(part=>{
+        if(part&&part.type==='text') return part.text||'';
+        if(part&&(part.type==='image'||part.type==='image_url')) return '[photo attached]';
+        return '';
+      }).filter(Boolean).join('\n')||'[attachment]';
+      return '';
+    };
+
+    async function requestGroq(messages,maxTokens){
+      const key=typeof win.getGroqApiKey==='function' ? win.getGroqApiKey() : (win.localStorage.getItem('ev-groq-api-key')||'');
+      if(!key) throw Object.assign(new Error('Groq API key is missing.'),{status:401});
+      const response=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+        body:JSON.stringify({
+          model:'openai/gpt-oss-120b',
+          messages,
+          max_completion_tokens:maxTokens,
+          temperature:0.7,
+          reasoning_effort:'low',
+          include_reasoning:false
+        })
+      });
+      const raw=await response.text().catch(()=> '');
+      if(!response.ok){
+        const err=new Error('Groq '+response.status+(raw?' — '+raw:''));
+        err.status=response.status;
+        throw err;
+      }
+      return JSON.parse(raw);
+    }
+
+    function compactMessages(currentText){
+      const h=Array.isArray(win.history)?win.history:[];
+      const messages=[];
+      let system=typeof win.BASE_SYSTEM_PROMPT==='string' ? safeClip(win.BASE_SYSTEM_PROMPT,2200) : 'You are E.V., a warm and useful personal AI assistant.';
+      try{if(typeof win.timeContext==='function')system+='\n\n'+safeClip(win.timeContext(),500);}catch(_){}
+      try{if(typeof win.agendaContext==='function')system+='\n\n'+safeClip(win.agendaContext(),600);}catch(_){}
+      try{if(typeof win.memoryContext==='function')system+='\n\n'+safeClip(win.memoryContext(),700);}catch(_){}
+      try{if(typeof win.adjustmentsContext==='function')system+='\n\n'+safeClip(win.adjustmentsContext(),400);}catch(_){}
+      messages.push({role:'system',content:safeClip(system,4400)});
+
+      const recent=[];
+      for(let i=h.length-1;i>=0&&recent.length<4;i--){
+        const m=h[i];
+        if(!m|| (m.role!=='user'&&m.role!=='assistant'))continue;
+        const content=safeClip(textOf(m.content).trim(),500);
+        if(content)recent.unshift({role:m.role,content});
+      }
+      if(!recent.length || recent[recent.length-1].role!=='user' || recent[recent.length-1].content!==safeClip(currentText,500)){
+        recent.push({role:'user',content:safeClip(currentText,500)});
+      }
+      for(const m of recent){
+        const last=messages[messages.length-1];
+        if(last.role===m.role && m.role!=='system') last.content+='\n'+m.content;
+        else messages.push(m);
+      }
+      return messages;
+    }
+
+    async function safeSend(text,image){
+      if(win.__evSafeBusy)return;
+      win.__evSafeBusy=true;
+      const input=doc.getElementById('input');
+      const send=doc.getElementById('send');
+      if(send)send.disabled=true;
+      const message=text|| (image?'What do you see in this photo?':'');
+      if(!message)return;
+      if(!Array.isArray(win.history))win.history=[];
+      win.history.push({role:'user',content:image?message:message});
+      try{win.vizState='thinking';}catch(_){}
+      const bubble=typeof win.addThinkingRow==='function'?win.addThinkingRow():null;
+      try{
+        let data;
+        try{
+          data=await requestGroq(compactMessages(message),300);
+        }catch(first){
+          if(first&&first.status===413){
+            data=await requestGroq([
+              {role:'system',content:'You are E.V. Reply briefly and naturally to the user.'},
+              {role:'user',content:safeClip(message,300)}
+            ],160);
+          }else throw first;
+        }
+        const raw=data?.choices?.[0]?.message?.content||'(no response)';
+        let reply=String(raw).trim();
+        try{reply=win.extractSimulationTags(win.extractProposalTags(win.extractMemoryTags(reply),doc.getElementById('log')),doc.getElementById('log'));}catch(_){}
+        if(bubble){
+          bubble.classList.remove('thinking');
+          bubble.innerHTML=typeof win.linkify==='function'?win.linkify(reply):reply.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+        }
+        win.history.push({role:'assistant',content:reply});
+        try{if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));}catch(_){}
+        try{win.linkStatus.textContent='LINK ACTIVE';}catch(_){}
+        try{win.statModel.textContent='gpt-oss-120b';}catch(_){}
+        try{if(typeof win.buildTicker==='function')win.buildTicker();}catch(_){}
+        try{win.vizState='idle';}catch(_){}
+        try{if(typeof win.scrollToEnd==='function')win.scrollToEnd();}catch(_){}
+      }catch(err){
+        console.error('E.V. safe sender error',err);
+        if(bubble){
+          bubble.classList.remove('thinking');
+          let msg='E.V. connection failed. Try again in a moment.';
+          if(err?.status===413)msg='E.V. request was too large, so I stopped it before sending old chat.';
+          else if(err?.status===401)msg='E.V. needs her Groq API key. Enter it when prompted.';
+          bubble.textContent=msg;
+        }
+        try{win.vizState='idle';}catch(_){}
+      }finally{
+        win.__evSafeBusy=false;
+        if(send)send.disabled=false;
+        if(input)input.focus();
+        disableVoice();
+      }
+    }
+
+    /* Override the global function used by the original submit handler. */
+    win.sendMessage=safeSend;
+
+    /* Make the existing submit handler call our sender with normal text. */
+    const form=doc.getElementById('composer');
+    if(form){
+      form.addEventListener('submit',()=>{
+        setTimeout(disableVoice,0);
+      },true);
+    }
+
+    /* Keep the add-on features loaded, but never let it re-enable voice. */
     const features=doc.createElement('script');
-    features.src='./ev-features.js?v=voice-removed-2';
+    features.src='./ev-features.js?v=no-voice-safe-4';
     doc.body.appendChild(features);
 
-    const patch=doc.createElement('script');
-    patch.textContent=PATCH;
-    doc.body.appendChild(patch);
-  }catch(e){console.error('E.V. stable patch failed',e);}
+  }catch(err){
+    console.error('E.V. patch failed',err);
+  }
 });
 </script>
 </body>
