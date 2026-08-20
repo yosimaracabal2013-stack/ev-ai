@@ -10,7 +10,7 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 </head>
 <body>
 <div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
-  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=9" title="E.V."></iframe>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=10" title="E.V."></iframe>
 </div>
 <script>
 'use strict';
@@ -18,100 +18,69 @@ const frame=document.getElementById('evFrame');
 frame.addEventListener('load',()=>{
   try{
     const win=frame.contentWindow, doc=frame.contentDocument;
-    const input=doc.getElementById('input'), send=doc.getElementById('send'), form=doc.getElementById('composer');
-    win.__evSafeBusy=false;
+    const input=doc.getElementById('input'), send=doc.getElementById('send');
+
+    /* Keep E.V.'s original interface, personality, voice, memory, agenda,
+       weather/search updates, and response behavior. Only remove the old
+       microphone input / wake-word control that was causing the iPhone issues. */
     const style=doc.createElement('style');
-    style.textContent='#voiceBtn,#voiceSelect,#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}.controls-row:has(#voiceBtn),.controls-row:has(#voiceSelect){display:none!important}';
+    style.textContent='#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}';
     doc.head.appendChild(style);
-    const removeVoice=()=>['voiceBtn','voiceSelect','micBtn'].forEach(id=>{const e=doc.getElementById(id);if(e)e.remove();});
-    removeVoice();
+    const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove();};
+    removeMic();
 
-    const textOf=v=>typeof v==='string'?v:Array.isArray(v)?v.map(x=>x&&x.type==='text'?x.text||'':'').join('\n'):'';
-    const clip=(v,n)=>String(v||'').slice(-n);
-    const getKey=()=>{
-      let k='';
-      try{if(typeof win.getGroqApiKey==='function')k=win.getGroqApiKey()||'';}catch(_){}
-      if(!k)try{k=win.localStorage.getItem('ev-groq-api-key')||'';}catch(_){}
-      if(!k)try{k=win.localStorage.getItem('groq-api-key')||'';}catch(_){}
-      return k;
-    };
-    async function groq(messages){
-      let key=getKey();
-      if(!key){key=prompt('Enter E.V. Groq API key:')||'';if(key)try{win.localStorage.setItem('ev-groq-api-key',key.trim());}catch(_){} }
-      if(!key)throw Object.assign(new Error('E.V. needs her Groq API key.'),{status:401});
-      const c=new AbortController(), timer=setTimeout(()=>c.abort(),15000);
+    /* The original E.V. voice system is SpeechSynthesis-based. On iPhone,
+       audio needs a user gesture before Safari will reliably allow later
+       speech after an API response. If voice is already enabled, prime it
+       when SEND is tapped; if it is off, turn it on exactly as the original
+       voice button would. */
+    let voicePrimed=false;
+    function primeVoice(){
+      if(voicePrimed) return;
       try{
-        const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
-          method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key.trim()},signal:c.signal,
-          body:JSON.stringify({model:'openai/gpt-oss-120b',messages,max_completion_tokens:220,temperature:.7})
-        });
-        const raw=await r.text();
-        if(!r.ok){const e=new Error('Groq '+r.status);e.status=r.status;e.raw=raw;throw e;}
-        return JSON.parse(raw);
-      }catch(e){if(e.name==='AbortError')throw Object.assign(new Error('E.V. timed out.'),{status:408});throw e;}
-      finally{clearTimeout(timer);}
-    }
-    function makeMessages(current){
-      let system='You are E.V., a warm, helpful personal AI assistant. Reply naturally and concisely. Never claim an action happened if it did not.';
-      try{if(typeof win.BASE_SYSTEM_PROMPT==='string')system=clip(win.BASE_SYSTEM_PROMPT,2200);}catch(_){}
-      const out=[{role:'system',content:clip(system,2600)}];
-      const h=Array.isArray(win.history)?win.history:[];
-      const recent=[];
-      for(let i=h.length-1;i>=0&&recent.length<5;i--){const m=h[i];if(!m||(m.role!=='user'&&m.role!=='assistant'))continue;const c=clip(textOf(m.content).trim(),300);if(c)recent.unshift({role:m.role,content:c});}
-      if(!recent.length||recent[recent.length-1].role!=='user'||recent[recent.length-1].content!==current)recent.push({role:'user',content:clip(current,350)});
-      return out.concat(recent);
-    }
-    function addUser(text){try{if(typeof win.addRow==='function')win.addRow('user',text);}catch(_){} }
-    function addEv(text){try{return typeof win.addRow==='function'?win.addRow('ev',text):null;}catch(_){return null;}}
-
-    async function safeSend(text){
-      text=String(text||'').trim();
-      if(!text||win.__evSafeBusy)return;
-      win.__evSafeBusy=true;
-      if(send)send.disabled=true;
-      if(input)input.value='';
-      addUser(text);
-      let bubble=addEv('Thinking…');
-      if(bubble)bubble.classList.add('thinking');
-      try{
-        let data;
-        try{data=await groq(makeMessages(text));}
-        catch(e){
-          if(e.status===413){data=await groq([{role:'system',content:'You are E.V. Reply briefly and directly.'},{role:'user',content:clip(text,220)}]);}
-          else throw e;
+        const vb=doc.getElementById('voiceBtn');
+        if(vb && !vb.classList.contains('on')){
+          vb.click();
+        }else if(win.speechSynthesis && typeof win.speak==='function'){
+          win.speak(' ');
         }
-        const reply=String(data?.choices?.[0]?.message?.content||'No response.').trim();
-        if(bubble){bubble.classList.remove('thinking');bubble.textContent=reply;}
-        else addEv(reply);
-        if(Array.isArray(win.history)){win.history.push({role:'user',content:text},{role:'assistant',content:reply});}
-        try{if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));}catch(_){}
-        try{win.vizState='idle';}catch(_){}
-        try{if(typeof win.scrollToEnd==='function')win.scrollToEnd();}catch(_){}
-      }catch(e){
-        console.error('E.V. sender:',e);
-        const msg=e.status===401?'E.V. needs her Groq API key.':e.status===408?'E.V. timed out. Try again.':e.status===429?'Groq is rate-limiting E.V. Try again in a few seconds.':e.status===413?'That message was too large. Try a shorter message.':'E.V. connection failed ('+(e.status||'network')+'). Try again.';
-        if(bubble){bubble.classList.remove('thinking');bubble.textContent=msg;}else addEv(msg);
-      }finally{
-        win.__evSafeBusy=false;
-        if(send)send.disabled=false;
-        if(input)input.focus();
-        removeVoice();
-      }
+        voicePrimed=true;
+      }catch(_){}
     }
 
-    /* IMPORTANT: the old page has its own click/submit sender. Intercept the
-       SEND click and Enter key BEFORE that handler so it cannot lock the UI. */
-    if(send)send.addEventListener('click',e=>{e.preventDefault();e.stopImmediatePropagation();safeSend(input?input.value:'');},true);
-    if(form)form.addEventListener('submit',e=>{e.preventDefault();e.stopImmediatePropagation();safeSend(input?input.value:'');},true);
-    if(input)input.addEventListener('keydown',e=>{
-      if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();e.stopImmediatePropagation();safeSend(input.value);}
-    },true);
-    doc.addEventListener('click',e=>{
-      const t=e.target;
-      if(t&&(t.id==='micBtn'||t.id==='voiceBtn')){e.preventDefault();e.stopImmediatePropagation();removeVoice();}
-    },true);
-    removeVoice();
-  }catch(err){console.error('E.V. patch failed',err);}
+    /* Keep the original sender and original BASE_SYSTEM_PROMPT intact.
+       Instead of replacing E.V.'s brain with a new prompt, trim only the
+       oldest conversation turns in outgoing Groq requests. This prevents
+       repeated messages from eventually producing Groq 413 errors while
+       preserving the way E.V. talks. */
+    const originalFetch=win.fetch.bind(win);
+    win.fetch=async function(url, options={}){
+      try{
+        const target=typeof url==='string' ? url : (url && url.url) || '';
+        if(target.includes('api.groq.com/openai/v1/chat/completions') && options && typeof options.body==='string'){
+          const payload=JSON.parse(options.body);
+          if(Array.isArray(payload.messages) && payload.messages.length>9){
+            const system=payload.messages[0];
+            const recent=payload.messages.slice(1).slice(-8);
+            payload.messages=[system,...recent];
+            options={...options,body:JSON.stringify(payload)};
+          }
+        }
+      }catch(_){}
+      return originalFetch(url,options);
+    };
+
+    if(send){
+      send.addEventListener('click',()=>primeVoice(),true);
+    }
+    if(input){
+      input.addEventListener('keydown',e=>{
+        if(e.key==='Enter'&&!e.shiftKey) primeVoice();
+      },true);
+    }
+
+    removeMic();
+  }catch(err){console.error('E.V. compatibility patch failed',err);}
 });
 </script>
 </body>
