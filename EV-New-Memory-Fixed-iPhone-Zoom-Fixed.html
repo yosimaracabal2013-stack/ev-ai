@@ -10,7 +10,7 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 </head>
 <body>
 <div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
-  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html" title="E.V."></iframe>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=6" title="E.V."></iframe>
 </div>
 <script>
 'use strict';
@@ -22,38 +22,28 @@ frame.addEventListener('load',()=>{
     const win=frame.contentWindow;
     const doc=frame.contentDocument;
 
-    /* Keep the original E.V. appearance, but completely disable voice. */
+    /* Keep E.V.'s original design. Remove voice UI only. */
     const style=doc.createElement('style');
+    style.id='ev-no-voice-style';
     style.textContent=`
-      #voiceBtn,#voiceSelect,#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important;width:0!important;min-width:0!important;max-width:0!important;margin:0!important;padding:0!important;border:0!important;}
-      #statVoice{font-size:0!important;}
-      #statVoice::after{content:'off';font-size:10.5px;}
-      #input{min-width:0;}
+      #voiceBtn,#voiceSelect,#micBtn,.controls-row:has(#voiceBtn),.controls-row:has(#voiceSelect){display:none!important;visibility:hidden!important;pointer-events:none!important;}
     `;
     doc.head.appendChild(style);
 
-    const disableVoice=()=>{
-      try{win.voiceEnabled=false;}catch(_){}
-      try{win.localStorage.setItem('ev-voiceEnabled','false');}catch(_){}
-      try{if(win.speechSynthesis) win.speechSynthesis.cancel();}catch(_){}
-      try{win.speak=function(){};}catch(_){}
-      try{if(win.recognizer&&win.listening) win.recognizer.stop();}catch(_){}
-      ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{const el=doc.getElementById(id);if(el)el.remove();});
-      const stat=doc.getElementById('statVoice'); if(stat) stat.textContent='off';
-      try{if(typeof win.refreshSysStats==='function')win.refreshSysStats();}catch(_){}
+    const removeVoice=()=>{
+      ['voiceBtn','voiceSelect','micBtn'].forEach(id=>{
+        const el=doc.getElementById(id);
+        if(el) el.remove();
+      });
+      doc.querySelectorAll('.controls-row').forEach(row=>{
+        if(!row.textContent.trim()) row.remove();
+      });
+      try{if(win.speechSynthesis)win.speechSynthesis.cancel();}catch(_){}
     };
+    removeVoice();
+    const observer=new MutationObserver(removeVoice);
+    observer.observe(doc.documentElement,{subtree:true,childList:true});
 
-    disableVoice();
-    setTimeout(disableVoice,100);
-    setTimeout(disableVoice,500);
-    setInterval(disableVoice,2000);
-
-    /*
-      Replace only E.V.'s network sender. The original visual design,
-      memory, agenda, weather/features and all other UI stay intact.
-      The old sender was sending the entire saved conversation to Groq,
-      which could hit Groq's 8K TPM free-plan limit and return HTTP 413.
-    */
     const safeClip=(value,n)=>String(value||'').slice(-n);
     const textOf=(value)=>{
       if(typeof value==='string') return value;
@@ -66,8 +56,11 @@ frame.addEventListener('load',()=>{
     };
 
     async function requestGroq(messages,maxTokens){
-      const key=typeof win.getGroqApiKey==='function' ? win.getGroqApiKey() : (win.localStorage.getItem('ev-groq-api-key')||'');
+      const key=typeof win.getGroqApiKey==='function'
+        ? win.getGroqApiKey()
+        : (win.localStorage.getItem('ev-groq-api-key')||'');
       if(!key) throw Object.assign(new Error('Groq API key is missing.'),{status:401});
+
       const response=await fetch('https://api.groq.com/openai/v1/chat/completions',{
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
@@ -91,104 +84,131 @@ frame.addEventListener('load',()=>{
 
     function compactMessages(currentText){
       const h=Array.isArray(win.history)?win.history:[];
-      const messages=[];
-      let system=typeof win.BASE_SYSTEM_PROMPT==='string' ? safeClip(win.BASE_SYSTEM_PROMPT,2200) : 'You are E.V., a warm and useful personal AI assistant.';
+      let system='You are E.V., a warm, helpful personal AI assistant. Keep replies natural and concise.';
+      try{if(typeof win.BASE_SYSTEM_PROMPT==='string')system=safeClip(win.BASE_SYSTEM_PROMPT,2200);}catch(_){}
       try{if(typeof win.timeContext==='function')system+='\n\n'+safeClip(win.timeContext(),500);}catch(_){}
       try{if(typeof win.agendaContext==='function')system+='\n\n'+safeClip(win.agendaContext(),600);}catch(_){}
       try{if(typeof win.memoryContext==='function')system+='\n\n'+safeClip(win.memoryContext(),700);}catch(_){}
       try{if(typeof win.adjustmentsContext==='function')system+='\n\n'+safeClip(win.adjustmentsContext(),400);}catch(_){}
-      messages.push({role:'system',content:safeClip(system,4400)});
 
+      const messages=[{role:'system',content:safeClip(system,4200)}];
       const recent=[];
       for(let i=h.length-1;i>=0&&recent.length<4;i--){
         const m=h[i];
-        if(!m|| (m.role!=='user'&&m.role!=='assistant'))continue;
-        const content=safeClip(textOf(m.content).trim(),500);
+        if(!m||(m.role!=='user'&&m.role!=='assistant'))continue;
+        const content=safeClip(textOf(m.content).trim(),450);
         if(content)recent.unshift({role:m.role,content});
       }
-      if(!recent.length || recent[recent.length-1].role!=='user' || recent[recent.length-1].content!==safeClip(currentText,500)){
-        recent.push({role:'user',content:safeClip(currentText,500)});
+      const current=safeClip(currentText,450);
+      if(!recent.length||recent[recent.length-1].role!=='user'||recent[recent.length-1].content!==current){
+        recent.push({role:'user',content:current});
       }
-      for(const m of recent){
-        const last=messages[messages.length-1];
-        if(last.role===m.role && m.role!=='system') last.content+='\n'+m.content;
-        else messages.push(m);
-      }
+      for(const m of recent)messages.push(m);
       return messages;
     }
 
-    async function safeSend(text,image){
-      if(win.__evSafeBusy)return;
+    async function safeSend(text){
+      const message=String(text||'').trim();
+      if(!message||win.__evSafeBusy)return;
       win.__evSafeBusy=true;
-      const input=doc.getElementById('input');
       const send=doc.getElementById('send');
+      const input=doc.getElementById('input');
       if(send)send.disabled=true;
-      const message=text|| (image?'What do you see in this photo?':'');
-      if(!message)return;
+
       if(!Array.isArray(win.history))win.history=[];
-      win.history.push({role:'user',content:image?message:message});
-      try{win.vizState='thinking';}catch(_){}
-      const bubble=typeof win.addThinkingRow==='function'?win.addThinkingRow():null;
+      win.history.push({role:'user',content:message});
+      let bubble=null;
       try{
+        win.vizState='thinking';
+        bubble=typeof win.addThinkingRow==='function'?win.addThinkingRow():null;
+
         let data;
         try{
-          data=await requestGroq(compactMessages(message),300);
+          data=await requestGroq(compactMessages(message),260);
         }catch(first){
           if(first&&first.status===413){
             data=await requestGroq([
-              {role:'system',content:'You are E.V. Reply briefly and naturally to the user.'},
-              {role:'user',content:safeClip(message,300)}
-            ],160);
+              {role:'system',content:'You are E.V. Reply briefly and directly to the user.'},
+              {role:'user',content:safeClip(message,250)}
+            ],120);
           }else throw first;
         }
+
         const raw=data?.choices?.[0]?.message?.content||'(no response)';
         let reply=String(raw).trim();
-        try{reply=win.extractSimulationTags(win.extractProposalTags(win.extractMemoryTags(reply),doc.getElementById('log')),doc.getElementById('log'));}catch(_){}
+        try{
+          reply=win.extractSimulationTags(
+            win.extractProposalTags(
+              win.extractMemoryTags(reply,doc.getElementById('log')),
+              doc.getElementById('log')
+            ),
+            doc.getElementById('log')
+          );
+        }catch(_){}
+
         if(bubble){
           bubble.classList.remove('thinking');
-          bubble.innerHTML=typeof win.linkify==='function'?win.linkify(reply):reply.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+          bubble.innerHTML=typeof win.linkify==='function'
+            ?win.linkify(reply)
+            :reply.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
         }
         win.history.push({role:'assistant',content:reply});
-        try{if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));}catch(_){}
+        try{
+          if(typeof win.storageSet==='function'&&typeof win.sanitizeHistoryForStorage==='function')
+            await win.storageSet('ev-history',win.sanitizeHistoryForStorage(win.history));
+        }catch(_){}
         try{win.linkStatus.textContent='LINK ACTIVE';}catch(_){}
         try{win.statModel.textContent='gpt-oss-120b';}catch(_){}
         try{if(typeof win.buildTicker==='function')win.buildTicker();}catch(_){}
         try{win.vizState='idle';}catch(_){}
         try{if(typeof win.scrollToEnd==='function')win.scrollToEnd();}catch(_){}
       }catch(err){
-        console.error('E.V. safe sender error',err);
+        console.error('E.V. fixed sender error',err);
         if(bubble){
           bubble.classList.remove('thinking');
-          let msg='E.V. connection failed. Try again in a moment.';
-          if(err?.status===413)msg='E.V. request was too large, so I stopped it before sending old chat.';
-          else if(err?.status===401)msg='E.V. needs her Groq API key. Enter it when prompted.';
-          bubble.textContent=msg;
+          bubble.textContent=err?.status===413
+            ?'E.V. request was too large. The old chat was not sent.'
+            :err?.status===401
+              ?'E.V. needs her Groq API key. Enter it when prompted.'
+              :'E.V. connection failed. Please try again.';
         }
         try{win.vizState='idle';}catch(_){}
       }finally{
         win.__evSafeBusy=false;
         if(send)send.disabled=false;
         if(input)input.focus();
-        disableVoice();
+        removeVoice();
       }
     }
 
-    /* Override the global function used by the original submit handler. */
-    win.sendMessage=safeSend;
-
-    /* Make the existing submit handler call our sender with normal text. */
+    /* IMPORTANT: the original page's submit listener closes over its own
+       sendMessage function, so replacing window.sendMessage is not enough.
+       Capture the submit event first and stop the broken original handler. */
     const form=doc.getElementById('composer');
     if(form){
-      form.addEventListener('submit',()=>{
-        setTimeout(disableVoice,0);
+      form.addEventListener('submit',(e)=>{
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const input=doc.getElementById('input');
+        const text=input?input.value.trim():'';
+        if(!text)return;
+        if(typeof win.addRow==='function')win.addRow('user',text,null,null);
+        if(input){input.value='';input.style.height='auto';}
+        safeSend(text);
       },true);
     }
 
-    /* Keep the add-on features loaded, but never let it re-enable voice. */
-    const features=doc.createElement('script');
-    features.src='./ev-features.js?v=no-voice-safe-4';
-    doc.body.appendChild(features);
+    /* Block the old mic even if another script tries to recreate it. */
+    doc.addEventListener('click',(e)=>{
+      const t=e.target;
+      if(t&&(t.id==='micBtn'||t.id==='voiceBtn')){
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        removeVoice();
+      }
+    },true);
 
+    removeVoice();
   }catch(err){
     console.error('E.V. patch failed',err);
   }
