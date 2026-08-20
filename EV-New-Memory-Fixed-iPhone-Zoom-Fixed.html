@@ -29,25 +29,6 @@ frame.addEventListener('load',()=>{
     const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove();};
     removeMic();
 
-    /* The original E.V. voice system is SpeechSynthesis-based. On iPhone,
-       audio needs a user gesture before Safari will reliably allow later
-       speech after an API response. If voice is already enabled, prime it
-       when SEND is tapped; if it is off, turn it on exactly as the original
-       voice button would. */
-    let voicePrimed=false;
-    function primeVoice(){
-      if(voicePrimed) return;
-      try{
-        const vb=doc.getElementById('voiceBtn');
-        if(vb && !vb.classList.contains('on')){
-          vb.click();
-        }else if(win.speechSynthesis && typeof win.speak==='function'){
-          win.speak(' ');
-        }
-        voicePrimed=true;
-      }catch(_){}
-    }
-
     /* Keep the original sender and original BASE_SYSTEM_PROMPT intact.
        Instead of replacing E.V.'s brain with a new prompt, trim only the
        oldest conversation turns in outgoing Groq requests. This prevents
@@ -70,12 +51,19 @@ frame.addEventListener('load',()=>{
       return originalFetch(url,options);
     };
 
+    /* Load the Jarvis-style layer only inside the existing E.V. page.
+       It adds text commands and leaves normal chat untouched. */
+    const jarvis=doc.createElement('script');
+    jarvis.src='./ev-jarvis-layer.js?v=1';
+    jarvis.async=false;
+    doc.body.appendChild(jarvis);
+
     if(send){
-      send.addEventListener('click',()=>primeVoice(),true);
+      send.addEventListener('click',()=>removeMic(),true);
     }
     if(input){
       input.addEventListener('keydown',e=>{
-        if(e.key==='Enter'&&!e.shiftKey) primeVoice();
+        if(e.key==='Enter'&&!e.shiftKey) removeMic();
       },true);
     }
 
