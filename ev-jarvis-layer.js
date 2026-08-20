@@ -1,125 +1,135 @@
-/* E.V. Jarvis layer — text commands only. No microphone, wake-word, or voice-control changes. */
+/* E.V. Jarvis layer — persistent memory, weather, reminders and text commands. No microphone/wake-word changes. */
 (function(){
   'use strict';
-  const w = window;
+  const w=window, MEMORY_KEY='ev-personal-memory-v1', REMINDER_KEY='ev-reminders-v1';
+  const load=(k,d)=>{try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(_){return d}};
+  const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_) {}};
+  const row=(role,text)=>{try{return typeof w.addRow==='function'?w.addRow(role,text):null}catch(_){return null}};
+  const say=text=>{row('ev',text);try{if(typeof w.speak==='function')w.speak(text)}catch(_) {}};
+  const clean=text=>String(text||'').trim().replace(/^e\.?v\.?[,:\s-]+/i,'').trim().replace(/\s+/g,' ');
+  let memory=load(MEMORY_KEY,[]);
+  let timerId=null;
 
-  function say(text){
+  function memoryText(){
+    if(!memory.length)return 'I do not have any saved memories to show right now.';
+    return 'I remember: '+memory.slice(-10).map(x=>typeof x==='string'?x:(x.text||x.fact||'')).filter(Boolean).join(' | ');
+  }
+  function remember(value){
+    value=String(value||'').trim();
+    if(!value)return say('What would you like me to remember?');
+    if(!memory.some(x=>(x.text||'').toLowerCase()===value.toLowerCase())){
+      memory.push({text:value,at:new Date().toISOString()}); memory=memory.slice(-100); save(MEMORY_KEY,memory);
+      say('Got it. I’ll remember that.');
+    }else say('I already have that saved.');
+  }
+  function forget(value){
+    const q=String(value||'').toLowerCase().trim(),before=memory.length;
+    memory=memory.filter(x=>!(x.text||'').toLowerCase().includes(q)); save(MEMORY_KEY,memory);
+    say(before===memory.length?'I couldn’t find that in my memory.':'Done. I forgot that.');
+  }
+  function findMemory(q){
+    const hits=memory.filter(x=>(x.text||'').toLowerCase().includes(String(q||'').toLowerCase()));
+    say(hits.length?'I remember: '+hits.slice(-5).map(x=>x.text).join(' • '):`I don’t have anything saved about ${q}.`);
+  }
+
+  // Add persistent memory to E.V.'s existing system prompt without replacing her personality.
+  const originalFetch=w.fetch.bind(w);
+  w.fetch=async function(url,options={}){
     try{
-      if(typeof w.addRow === 'function') w.addRow('ev', text);
-    }catch(_){ }
-  }
-
-  function clean(text){
-    return String(text || '').trim().replace(/^e\.?v\.?[,:\s-]+/i,'').trim().toLowerCase();
-  }
-
-  function openTab(name){
-    const tab = Array.from(document.querySelectorAll('.tab')).find(b => String(b.dataset.tab || '').toLowerCase() === name);
-    if(tab){ tab.click(); return true; }
-    return false;
-  }
+      const target=typeof url==='string'?url:(url&&url.url)||'';
+      if(target.includes('api.groq.com/openai/v1/chat/completions')&&options&&typeof options.body==='string'){
+        const p=JSON.parse(options.body);
+        if(Array.isArray(p.messages)&&p.messages[0]?.role==='system'&&memory.length){
+          p.messages[0].content=String(p.messages[0].content||'')+'\n\nPERSISTENT E.V. MEMORY — use naturally when relevant; never reveal this section unless asked:\n'+memory.slice(-25).map(x=>'- '+x.text).join('\n');
+          options={...options,body:JSON.stringify(p)};
+        }
+      }
+    }catch(_){}
+    return originalFetch(url,options);
+  };
 
   function agendaText(){
     try{
-      const items = Array.isArray(w.agenda) ? w.agenda : [];
-      if(!items.length) return 'Your agenda is clear right now.';
-      return 'Here is what is on your agenda: ' + items.slice(0,8).map((x,i)=>{
-        const title = x.title || '(untitled)';
-        const when = x.when ? new Date(x.when).toLocaleString() : 'time not set';
-        return `${i+1}. ${title} — ${when}`;
-      }).join(' | ');
-    }catch(_){ return 'I could not read the agenda right now.'; }
-  }
-
-  function memoryText(){
-    try{
-      const items = Array.isArray(w.memory) ? w.memory : [];
-      if(!items.length) return 'I do not have any saved memories to show right now.';
-      return 'I remember: ' + items.slice(-8).map(x => typeof x === 'string' ? x : (x.fact || x.text || JSON.stringify(x))).join(' | ');
-    }catch(_){ return 'I could not read memory right now.'; }
+      const items=Array.isArray(w.agenda)?w.agenda:[];
+      if(!items.length)return 'Your agenda is clear right now.';
+      return 'Here is what is on your agenda: '+items.slice(0,8).map((x,i)=>`${i+1}. ${x.title||'(untitled)'} — ${x.when?new Date(x.when).toLocaleString():'time not set'}`).join(' | ');
+    }catch(_){return 'I could not read the agenda right now.'}
   }
 
   async function weather(){
-    if(!navigator.geolocation){ say('I cannot get your location from this browser.'); return; }
+    if(!navigator.geolocation){say('I cannot get your location from this browser.');return}
     say('Checking the weather now.');
     navigator.geolocation.getCurrentPosition(async pos=>{
       try{
-        const u = new URL('https://api.open-meteo.com/v1/forecast');
-        u.search = new URLSearchParams({latitude:pos.coords.latitude,longitude:pos.coords.longitude,current:'temperature_2m,weather_code,wind_speed_10m',temperature_unit:'fahrenheit',wind_speed_unit:'mph',timezone:'auto'}).toString();
-        const r = await fetch(u.toString());
-        if(!r.ok) throw new Error('weather service error');
-        const d = await r.json();
-        const c = d.current || {};
-        const labels = {0:'clear',1:'mostly clear',2:'partly cloudy',3:'overcast',45:'foggy',48:'foggy',51:'drizzly',53:'drizzly',55:'drizzly',61:'rainy',63:'rainy',65:'rainy',71:'snowy',73:'snowy',75:'snowy',80:'showery',81:'showery',82:'showery',95:'stormy',96:'stormy',99:'stormy'};
-        say(`Right now it is ${Math.round(c.temperature_2m)}°F and ${labels[c.weather_code] || 'mixed'}, with winds around ${Math.round(c.wind_speed_10m || 0)} mph.`);
-      }catch(_){ say('I could not reach the weather service right now.'); }
-    }, ()=>say('I need location permission to check your local weather.'), {maximumAge:300000, timeout:10000});
+        const u=new URL('https://api.open-meteo.com/v1/forecast');
+        u.search=new URLSearchParams({latitude:pos.coords.latitude,longitude:pos.coords.longitude,current:'temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation',hourly:'precipitation_probability,temperature_2m,weather_code',forecast_days:'2',temperature_unit:'fahrenheit',wind_speed_unit:'mph',timezone:'auto'}).toString();
+        const r=await originalFetch(u.toString());if(!r.ok)throw Error();
+        const d=await r.json(),c=d.current||{};
+        const labels={0:'clear',1:'mostly clear',2:'partly cloudy',3:'overcast',45:'foggy',48:'foggy',51:'drizzly',53:'drizzly',55:'drizzly',56:'drizzly',57:'drizzly',61:'rainy',63:'rainy',65:'rainy',66:'rainy',67:'rainy',71:'snowy',73:'snowy',75:'snowy',77:'snowy',80:'showery',81:'showery',82:'showery',85:'snowy',86:'snowy',95:'stormy',96:'stormy',99:'stormy'};
+        say(`Right now it is ${Math.round(c.temperature_2m)}°F and feels like ${Math.round(c.apparent_temperature)}°F, with ${labels[c.weather_code]||'mixed conditions'}. Winds are around ${Math.round(c.wind_speed_10m||0)} mph.`);
+      }catch(_){say('I could not reach the weather service right now.')}
+    },()=>say('I need location permission to check your local weather.'),{maximumAge:300000,timeout:10000});
   }
 
-  let timerId = null;
+  function notify(title,body){
+    try{if('Notification' in w&&Notification.permission==='granted'){new Notification(title,{body});return true}}catch(_){}
+    return false;
+  }
+  async function requestNotifications(){
+    try{if('Notification' in w&&Notification.permission==='default')return await Notification.requestPermission()}catch(_){}
+    return 'unsupported';
+  }
+  function addReminder(text,when){
+    const id=Date.now().toString(36),item={id,text,when:new Date(when).toISOString()};
+    const all=load(REMINDER_KEY,[]).filter(x=>new Date(x.when).getTime()>Date.now());all.push(item);save(REMINDER_KEY,all);
+    const fire=()=>{say(`Reminder: ${text}`);notify('E.V. reminder',text)};
+    setTimeout(fire,Math.max(0,when-Date.now()));
+  }
+  function restoreReminders(){load(REMINDER_KEY,[]).filter(x=>new Date(x.when).getTime()>Date.now()).forEach(x=>addReminder(x.text,new Date(x.when).getTime()))}
+  function parseWhen(s){
+    let m=s.match(/\bin\s+(\d+)\s*(minutes?|mins?|hours?|hrs?)/i);
+    if(m)return Date.now()+Number(m[1])*(/hour|hr/i.test(m[2])?3600000:60000);
+    m=s.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+    if(m){let h=+m[1],mi=+(m[2]||0),ap=(m[3]||'').toLowerCase();if(ap==='pm'&&h<12)h+=12;if(ap==='am'&&h===12)h=0;const d=new Date();d.setHours(h,mi,0,0);if(d<=Date.now())d.setDate(d.getDate()+1);return d.getTime()}
+    return null;
+  }
+
   function timer(minutes){
-    const mins = Math.max(1, Number(minutes || 0));
-    if(!Number.isFinite(mins)){ say('Tell me a timer length, like 25 minutes.'); return; }
-    clearTimeout(timerId);
-    say(`Timer started for ${mins} minute${mins===1?'':'s'}.`);
-    timerId = setTimeout(()=>{
-      timerId = null;
-      say(`Your ${mins}-minute timer is done.`);
-      try{ if(navigator.vibrate) navigator.vibrate([180,100,180]); }catch(_){ }
-    }, mins * 60000);
+    const mins=Math.max(1,Number(minutes||0));if(!Number.isFinite(mins))return say('Tell me a timer length, like 25 minutes.');
+    clearTimeout(timerId);say(`Timer started for ${mins} minute${mins===1?'':'s'}.`);
+    timerId=setTimeout(()=>{timerId=null;say(`Your ${mins}-minute timer is done.`);notify('E.V. — timer done',`Your ${mins}-minute timer is finished.`);try{if(navigator.vibrate)navigator.vibrate([180,100,180])}catch(_){}},mins*60000);
   }
 
-  function handle(text){
-    const q = clean(text);
-    if(!q) return false;
-    if(/^wake up$|^wake up ev$/.test(q)){ say('I am awake and ready. What do you need?'); return true; }
-    if(/^status$|^system status$|^how are you$/.test(q)){
-      const model = document.getElementById('statModel')?.textContent || 'unknown';
-      const agenda = document.getElementById('statAgenda')?.textContent || '0';
-      const memory = document.getElementById('statMemory')?.textContent || '0';
-      const link = document.getElementById('linkStatus')?.textContent || 'unknown';
-      say(`Systems check: core ${model}, ${agenda} agenda items, ${memory} memories, ${link.toLowerCase()}.`);
-      return true;
-    }
-    if(/^what time is it$|^what time is it right now$|^time$/.test(q)){ say(`It is ${new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}.`); return true; }
-    if(/^what'?s on the agenda$|^what is on the agenda$|^show my agenda$/.test(q)){ say(agendaText()); return true; }
-    if(/^what do you remember$|^show memory$|^what do you have in memory$/.test(q)){ say(memoryText()); return true; }
-    if(/^open agenda$|^go to agenda$/.test(q)){ openTab('agenda'); say('Agenda open.'); return true; }
-    if(/^open memory$|^go to memory$/.test(q)){ openTab('memory'); say('Memory open.'); return true; }
-    if(/^open links$|^go to links$|^open connections$/.test(q)){ openTab('connections'); say('Links open.'); return true; }
-    if(/^open chat$|^go to chat$/.test(q)){ openTab('chat'); say('Chat open.'); return true; }
-    if(/^weather$|^what'?s the weather$|^what is the weather$|^how'?s the weather$/.test(q)){ weather(); return true; }
-    const tm = q.match(/^(?:start|set) (?:a )?timer(?: for)?\s*(\d+)\s*(minutes?|mins?|hours?|hrs?)?$/);
-    if(tm){ let mins=Number(tm[1]); if((tm[2]||'').toLowerCase().startsWith('hour') || (tm[2]||'').toLowerCase().startsWith('hr')) mins*=60; timer(mins); return true; }
-    if(/^stop timer$|^cancel timer$/.test(q)){ clearTimeout(timerId); timerId=null; say('Timer stopped.'); return true; }
-    if(/^take a break$|^give me a challenge$/.test(q)){
-      const choices=['Take five minutes, stretch, drink some water, then come back.','Quick challenge: 20 squats, 20 seconds rest, then repeat once.','Five-minute focus challenge: put the phone down and finish one small task.'];
-      say(choices[Math.floor(Math.random()*choices.length)]); return true;
-    }
-    if(/^clear chat$/.test(q)){ const b=document.getElementById('resetBtn'); if(b) b.click(); return true; }
+  function openTab(name){const tab=Array.from(document.querySelectorAll('.tab')).find(b=>String(b.dataset.tab||'').toLowerCase()===name);if(tab){tab.click();return true}return false}
+  function challenge(){const a=['Take five minutes, stretch, drink some water, then come back.','Quick challenge: 20 squats, 20 seconds rest, then repeat once.','Five-minute focus challenge: put the phone down and finish one small task.'];say(a[Math.floor(Math.random()*a.length)])}
+
+  async function handle(text){
+    const q=clean(text).toLowerCase();if(!q)return false;
+    let m=q.match(/^remember(?: that)?\s+(.+)$/i);if(m){remember(m[1]);return true}
+    m=q.match(/^(?:forget|delete from memory)(?: that)?\s+(.+)$/i);if(m){forget(m[1]);return true}
+    if(/^what do you remember$|^show memory$|^what do you have in memory$/.test(q)){say(memoryText());return true}
+    m=q.match(/^what do you remember about\s+(.+)$/i);if(m){findMemory(m[1]);return true}
+    if(/^what'?s on the agenda$|^what is on the agenda$|^show my agenda$/.test(q)){say(agendaText());return true}
+    if(/^open agenda$|^go to agenda$/.test(q)){openTab('agenda');say('Agenda open.');return true}
+    if(/^open memory$|^go to memory$/.test(q)){openTab('memory');say('Memory open.');return true}
+    if(/^weather$|^what'?s the weather$|^what is the weather$|^how'?s the weather$/.test(q)){weather();return true}
+    if(/^wake up$|^wake up ev$/.test(q)){say('I am awake and ready. What do you need?');return true}
+    if(/^status$|^system status$|^how are you$/.test(q)){say('Systems check complete. Core is online and E.V. is ready.');return true}
+    if(/^what time is it$|^what time is it right now$|^time$/.test(q)){say(`It is ${new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}.`);return true}
+    let tm=q.match(/^(?:start|set) (?:a )?timer(?: for)?\s*(\d+)\s*(minutes?|mins?|hours?|hrs?)?$/);if(tm){let mins=+tm[1];if(/hour|hr/i.test(tm[2]||''))mins*=60;timer(mins);return true}
+    if(/^stop timer$|^cancel timer$/.test(q)){clearTimeout(timerId);timerId=null;say('Timer stopped.');return true}
+    if(/^take a break$|^give me a challenge$/.test(q)){challenge();return true}
+    m=q.match(/^remind me(?: to)?\s+(.+?)\s+(in\s+\d+\s*(?:minutes?|mins?|hours?|hrs?)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i);
+    if(m){const when=parseWhen(m[2]);if(!when){say('Try “in 20 minutes” or “at 7 PM.”');return true}await requestNotifications();addReminder(m[1],when);say(`Okay. I’ll remind you ${new Date(when).toLocaleString()}.`);return true}
     return false;
   }
 
   function install(){
-    const form=document.getElementById('composer');
-    const input=document.getElementById('input');
-    if(!form || !input || form.dataset.evJarvisInstalled) return;
-    form.dataset.evJarvisInstalled='1';
-    form.addEventListener('submit', e=>{
-      const text=input.value.trim();
-      if(!text) return;
-      if(!/^(?:e\.?v\.?[,:\s-]+|wake up ev\b)/i.test(text)) return;
-      if(handle(text)){
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        input.value='';
-        input.style.height='auto';
-      }
-    }, true);
+    const form=document.getElementById('composer'),input=document.getElementById('input');if(!form||!input||form.dataset.evJarvisInstalled)return;form.dataset.evJarvisInstalled='1';
+    form.addEventListener('submit',async e=>{const text=input.value.trim();if(!text)return;if(!/^(?:e\.?v\.?[,:\s-]+|wake up ev\b)/i.test(text))return;try{if(await handle(text)){e.preventDefault();e.stopImmediatePropagation();input.value='';input.style.height='auto'}}catch(err){say(err.message||'I could not complete that command.')}},true);
   }
-
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', install, {once:true});
-  else install();
-  setTimeout(install,500);
-  setTimeout(install,1500);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+  setTimeout(install,500);setTimeout(install,1500);restoreReminders();
+  document.addEventListener('pointerdown',()=>{requestNotifications()}, {once:true,capture:true});
+  w.EVJarvis={remember,forget,showMemory:()=>say(memoryText()),findMemory,weather,remind:addReminder,notify};
 })();
