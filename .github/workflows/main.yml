@@ -30,27 +30,94 @@ jobs:
         with:
           enablement: true
 
-      - name: Fix E.V. JavaScript boot syntax before publishing
+      - name: Fix E.V. JavaScript before publishing
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import re
-          p = Path('EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html')
-          s = p.read_text(encoding='utf-8')
 
-          # Two accidental syntax errors in the source prevent the whole script
-          # from parsing. Fix them in the published copy without changing the
-          # original development file structure.
-          s = re.sub(
-              r'async function\\s*/\\*\\s*-{10}\\s*Jarvis-style live weather\\s*-{10}\\s*\\*/',
-              '/* ---------- Jarvis-style live weather ---------- */',
-              s,
-              count=1,
-          )
-          s = s.replace('async sendMessage(text, image){', 'async function sendMessage(text, image){', 1)
+          # Patch the published copies only. The E.V. design/layout is untouched.
+          targets = [
+              Path('EV-New-Memory-Fixed-iPhone-Zoom-Fixed.html'),
+              Path('EV-New-Memory-Fixed-iPhone-Zoom-Voice-Time-Weather-Spotify-Fixed(1).html'),
+          ]
 
-          p.write_text(s, encoding='utf-8')
-          print('E.V. boot syntax fixes applied')
+          for p in targets:
+              if not p.exists():
+                  continue
+              s = p.read_text(encoding='utf-8')
+
+              # Keep the existing syntax fixes for the older development copy.
+              s = re.sub(
+                  r'async function\\s*/\\*\\s*-{10}\\s*Jarvis-style live weather\\s*-{10}\\s*\\*/',
+                  '/* ---------- Jarvis-style live weather ---------- */',
+                  s,
+                  count=1,
+              )
+              s = s.replace('async sendMessage(text, image){', 'async function sendMessage(text, image){', 1)
+
+              if p.name == 'EV-New-Memory-Fixed-iPhone-Zoom-Fixed.html':
+                  # 1) Do not resend an ever-growing transcript forever. The saved
+                  # memory/agenda still supply durable context, while the API gets
+                  # the recent conversation needed for normal multi-turn chat.
+                  s = s.replace(
+                      "function groqMessages(systemPrompt){\n  const msgs = [{ role: 'system', content: systemPrompt }];\n  for(const m of history){",
+                      "function groqMessages(systemPrompt){\n  const msgs = [{ role: 'system', content: systemPrompt }];\n  const recentHistory = history.slice(-24);\n  for(const m of recentHistory){",
+                      1,
+                  )
+
+                  # 2) Use the key actually returned by getGroqApiKey(), not a
+                  # stale global value. Keep the request compatible with Groq GPT-OSS.
+                  s = s.replace(
+                      'Authorization: `Bearer ${GROQ_API_KEY}`',
+                      'Authorization: `Bearer ${apiKey}`',
+                      1,
+                  )
+
+                  s = s.replace(
+                      'temperature: 0.7\n    })',
+                      'temperature: 0.7,\n      reasoning_effort: "low"\n    })',
+                      1,
+                  )
+
+                  # 3) Replace the old retry loop with rate-limit-aware retries.
+                  old_call_ev = '''async function callEv(systemPrompt){\n  const maxAttempts = 3;\n  let lastErr = null;\n  for(let attempt = 1; attempt <= maxAttempts; attempt++){\n    try{\n      const result = await callModel(GROQ_MODEL, systemPrompt);\n      statModel.textContent = 'gpt-oss-120b';\n      linkStatus.textContent = 'LINK ACTIVE';\n      buildTicker();\n      return result;\n    }catch(err){\n      lastErr = err;\n      if(err.status === 400 || err.status === 401 || err.status === 403) break;\n      if(attempt < maxAttempts){\n        if(bubble_thinking_label) bubble_thinking_label.innerHTML = 'reconnecting<span class="dots"><span>.</span><span>.</span><span>.</span></span>';\n        linkStatus.textContent = 'RECONNECTING';\n        await sleep(attempt * 900);\n      }\n    }\n  }\n  linkStatus.textContent = 'LINK DOWN';\n  throw lastErr;\n}'''
+                  new_call_ev = '''async function callEv(systemPrompt){\n  const maxAttempts = 4;\n  let lastErr = null;\n  for(let attempt = 1; attempt <= maxAttempts; attempt++){\n    try{\n      const result = await callModel(GROQ_MODEL, systemPrompt);\n      statModel.textContent = 'gpt-oss-120b';\n      linkStatus.textContent = 'LINK ACTIVE';\n      buildTicker();\n      return result;\n    }catch(err){\n      lastErr = err;\n\n      // A saved key can become invalid/revoked. Clear it so the next attempt\n      // gives E.V. a chance to ask for the current key instead of silently\n      // failing every later message.\n      if((err.status === 401 || err.status === 403) && attempt === 1){\n        GROQ_API_KEY = '';\n        try{ localStorage.removeItem('ev-groq-api-key'); }catch(_){}\n      }\n\n      if(err.status === 400 && attempt === 1){\n        break;\n      }\n\n      if(attempt < maxAttempts){\n        if(bubble_thinking_label) bubble_thinking_label.innerHTML = 'reconnecting<span class="dots"><span>.</span><span>.</span><span>.</span></span>';\n        linkStatus.textContent = 'RECONNECTING';\n\n        let waitMs = attempt * 900;\n        if(err.retryAfterMs) waitMs = Math.max(waitMs, err.retryAfterMs);\n        await sleep(waitMs);\n      }\n    }\n  }\n  linkStatus.textContent = 'LINK DOWN';\n  throw lastErr;\n}'''
+                  if old_call_ev not in s:
+                      raise SystemExit(f'Could not find callEv block in {p}')
+                  s = s.replace(old_call_ev, new_call_ev, 1)
+
+                  # 4) Preserve the real API status so a failure is diagnosable
+                  # instead of looking like a fake E.V. response.
+                  s = s.replace(
+                      "    const detail = await response.text().catch(() => '');\n    const err = new Error((response.status >= 400 && response.status < 500 ? \"Request failed: \" : \"Server error: \") + response.status + (detail ? \" — \" + detail : \"\"));\n    err.status = response.status;\n    throw err;",
+                      "    const detail = await response.text().catch(() => '');\n    const err = new Error((response.status >= 400 && response.status < 500 ? \"Request failed: \" : \"Server error: \") + response.status + (detail ? \" — \" + detail : \"\"));\n    err.status = response.status;\n    const retryAfter = Number(response.headers.get('retry-after') || 0);\n    if(retryAfter > 0) err.retryAfterMs = retryAfter * 1000;\n    throw err;",
+                      1,
+                  )
+
+                  # 5) Prevent overlapping submissions on iPhone/Safari and make
+                  # sure the lock is released even when the request fails.
+                  s = s.replace(
+                      'let bubble_thinking_label = null;\n',
+                      'let bubble_thinking_label = null;\nlet requestInFlight = false;\n',
+                      1,
+                  )
+                  s = s.replace(
+                      'async function sendMessage(text, image){\n  if(image){',
+                      'async function sendMessage(text, image){\n  if(requestInFlight) return;\n  requestInFlight = true;\n  if(image){',
+                      1,
+                  )
+
+                  # 6) Show a useful connection message on failure instead of a
+                  # generic line that makes it look like E.V. answered normally.
+                  old_catch = '''  }catch(err){\n    console.error(err);\n    vizState = 'idle';\n    bubble.classList.remove('thinking');\n    const offline = tryOfflineReply(text);\n    const reply = offline || \"Can't reach my main brain right now — that part genuinely needs the connection. Give it a minute and try again; I'm not going anywhere.\";\n    bubble.textContent = reply;\n    history.push({ role: 'assistant', content: reply });\n    scrollToEnd();\n  }\n}'''
+                  new_catch = '''  }catch(err){\n    console.error(err);\n    vizState = 'idle';\n    bubble.classList.remove('thinking');\n    const offline = tryOfflineReply(text);\n    let reply = offline;\n    if(!reply){\n      if(err?.status === 401 || err?.status === 403){\n        reply = \"My Groq connection rejected the saved key. I cleared it — send your message again and E.V. will ask for the current key.\";\n      }else if(err?.status === 429){\n        reply = \"Groq is rate-limiting E.V. for a moment. Give it a few seconds and send again.\";\n      }else{\n        reply = \"E.V.'s connection failed (\" + (err?.status || 'network') + \"). Try that message again — I kept the chat.\";\n      }\n    }\n    bubble.textContent = reply;\n    scrollToEnd();\n  }finally{\n    requestInFlight = false;\n  }\n}'''
+                  if old_catch not in s:
+                      raise SystemExit(f'Could not find sendMessage catch block in {p}')
+                  s = s.replace(old_catch, new_catch, 1)
+
+              p.write_text(s, encoding='utf-8')
+              print(f'Patched {p}')
           PY
 
       - name: Upload site
