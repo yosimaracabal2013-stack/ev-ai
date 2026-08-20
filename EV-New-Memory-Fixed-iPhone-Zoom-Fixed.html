@@ -7,7 +7,9 @@
 <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:block;overflow:hidden;background:#08090b}</style>
 </head>
 <body>
-<iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html" title="E.V."></iframe>
+<div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html" title="E.V."></iframe>
+</div>
 <script>
 const PATCH = String.raw`(function(){
   const form=document.getElementById('composer'), input=document.getElementById('input'), sendBtn=document.getElementById('send'), log=document.getElementById('log');
@@ -20,8 +22,6 @@ const PATCH = String.raw`(function(){
     return '';
   }
 
-  // Keep requests small enough for Groq and prevent stale/old transcript text
-  // from being sent back over and over on iPhone/Safari.
   function clip(s,n){ s=String(s||''); return s.length>n?s.slice(-n):s; }
   function safeMessages(systemPrompt,currentText){
     const out=[{role:'system',content:clip(systemPrompt,6500)}];
@@ -32,8 +32,6 @@ const PATCH = String.raw`(function(){
       const content=clip(textOf(m.content).trim(),900);
       if(content) recent.unshift({role:m.role,content});
     }
-    // The current user message is added exactly once. Do not duplicate it if
-    // the original app already pushed it into history before this function.
     const lastUser=recent.length?recent[recent.length-1]:null;
     if(lastUser && lastUser.role==='user' && lastUser.content===clip(currentText,900)) recent.pop();
     for(const m of recent){
@@ -60,8 +58,6 @@ const PATCH = String.raw`(function(){
       let data;
       try{ data=await safeCall(ctx,text); }
       catch(firstErr){
-        // Retry once with an even smaller request for transient 400/413/422
-        // payload problems. This also protects the second and later messages.
         if(firstErr&&(firstErr.status===400||firstErr.status===413||firstErr.status===422)){
           const key=getGroqApiKey();
           const compactSystem=clip(BASE_SYSTEM_PROMPT,3500)+'\\n'+clip(timeContext(),900)+'\\n'+clip(memoryContext(),1200);
@@ -71,7 +67,8 @@ const PATCH = String.raw`(function(){
       }
       const raw=data?.choices?.[0]?.message?.content||'(no response)';
       const reply=extractSimulationTags(extractProposalTags(extractMemoryTags(raw.trim()),log),log);
-      bubble.classList.remove('thinking'); bubble.innerHTML=linkify(reply); speak(reply);
+      bubble.classList.remove('thinking'); bubble.innerHTML=linkify(reply);
+      if(typeof speak==='function') { try { speak(''); } catch(_){} }
       history.push({role:'assistant',content:reply}); storageSet('ev-history',sanitizeHistoryForStorage(history)); scrollToEnd();
     }catch(err){
       console.error(err); bubble.classList.remove('thinking');
@@ -91,12 +88,32 @@ const frame=document.getElementById('evFrame');
 frame.addEventListener('load',()=>{
   try{
     const doc=frame.contentDocument;
+
+    // Keep all non-voice E.V. features, but remove voice control completely.
+    const voiceOff=doc.createElement('style');
+    voiceOff.textContent=`#voiceBtn,#voiceSelect,#micBtn{display:none!important;} #statVoice{font-size:0;} #statVoice::after{content:'off';font-size:inherit;}`;
+    doc.head.appendChild(voiceOff);
+
     const features=doc.createElement('script');
-    features.src='./ev-features.js?v=3';
+    features.src='./ev-features.js?v=4';
     doc.body.appendChild(features);
-    const wake=doc.createElement('script');
-    wake.src='./ev-wake-v2.js?v=3';
-    doc.body.appendChild(wake);
+
+    const voiceDisable=doc.createElement('script');
+    voiceDisable.textContent=`(function(){
+      try{
+        window.EVWake={supported:()=>false,enabled:()=>false,enable:()=>false,disable:()=>{},restart:()=>{}};
+        window.speak=function(){};
+        const oldSpeak=window.speechSynthesis&&window.speechSynthesis.speak;
+        if(window.speechSynthesis) window.speechSynthesis.speak=function(){};
+        const oldSpeech=window.SpeechRecognition||window.webkitSpeechRecognition;
+        try{ window.SpeechRecognition=undefined; window.webkitSpeechRecognition=undefined; }catch(_){}
+        const stopVoice=()=>{try{window.speechSynthesis?.cancel();}catch(_){} try{window.EVWake?.disable();}catch(_){} };
+        stopVoice();
+        document.addEventListener('click',e=>{if(e.target?.id==='voiceBtn'||e.target?.id==='micBtn')e.preventDefault();},true);
+      }catch(_){}
+    })();`;
+    doc.body.appendChild(voiceDisable);
+
     const s=doc.createElement('script');
     s.textContent=PATCH;
     doc.body.appendChild(s);
