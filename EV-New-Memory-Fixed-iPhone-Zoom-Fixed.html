@@ -31,21 +31,43 @@ frame.addEventListener('load',()=>{
 
     /* Keep the original sender and original BASE_SYSTEM_PROMPT intact.
        Trim only the oldest conversation turns in outgoing Groq requests so
-       repeated messages do not eventually hit Groq's 413 payload limit. */
+       repeated messages do not eventually hit Groq's 413 payload limit.
+       If the newest user turn contains a photo, switch that one request to
+       Groq's vision-capable Llama 4 Scout model and pass the actual image. */
     const originalFetch=win.fetch.bind(win);
     win.fetch=async function(url, options={}){
       try{
         const target=typeof url==='string' ? url : (url && url.url) || '';
         if(target.includes('api.groq.com/openai/v1/chat/completions') && options && typeof options.body==='string'){
           const payload=JSON.parse(options.body);
-          if(Array.isArray(payload.messages) && payload.messages.length>9){
+          if(Array.isArray(payload.messages)){
             const system=payload.messages[0];
             const recent=payload.messages.slice(1).slice(-8);
             payload.messages=[system,...recent];
+
+            const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
+            if(lastUserIndex>0){
+              const lastUser=payload.messages[lastUserIndex];
+              const photoRows=[...doc.querySelectorAll('.row.user img.chat-img')];
+              const lastPhoto=photoRows.length ? photoRows[photoRows.length-1] : null;
+              const text=typeof lastUser.content==='string' ? lastUser.content : '';
+              if(lastPhoto && /\(sent a photo\)|photo attached|what do you see in this photo/i.test(text)){
+                const dataUrl=lastPhoto.src;
+                payload.model='meta-llama/llama-4-scout-17b-16e-instruct';
+                payload.messages[lastUserIndex]={
+                  role:'user',
+                  content:[
+                    {type:'text',text:text.replace(/^\(sent a photo\)$/, 'What do you see in this photo?')},
+                    {type:'image_url',image_url:{url:dataUrl}}
+                  ]
+                };
+                payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||800,800);
+              }
+            }
             options={...options,body:JSON.stringify(payload)};
           }
         }
-      }catch(_){}
+      }catch(err){console.warn('E.V. request compatibility patch skipped:',err);}
       return originalFetch(url,options);
     };
 
