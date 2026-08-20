@@ -15,7 +15,7 @@ const PATCH = String.raw`(function(){
   let busy=false;
   function textOf(c){
     if(typeof c==='string') return c;
-    if(Array.isArray(c)) return c.map(x=>x&&x.type==='text'?x.text||'':x&&(x.type==='image'||x.type==='image_url')?'[photo attached]':'').filter(Boolean).join('\n')||'[attachment]';
+    if(Array.isArray(c)) return c.map(x=>x&&x.type==='text'?x.text||'':x&&(x.type==='image'||x.type==='image_url')?'[photo attached]':'').filter(Boolean).join('\\n')||'[attachment]';
     return '';
   }
   function safeMessages(systemPrompt){
@@ -24,21 +24,21 @@ const PATCH = String.raw`(function(){
       if(m.role!=='user'&&m.role!=='assistant') continue;
       const content=textOf(m.content).trim(); if(!content) continue;
       const last=out[out.length-1];
-      if(last.role===m.role) last.content+='\n'+content; else out.push({role:m.role,content});
+      if(last.role===m.role) last.content+='\\n'+content; else out.push({role:m.role,content});
     }
     return out;
   }
   async function safeCall(systemPrompt){
     const key=getGroqApiKey(); if(!key) throw new Error('Groq API key is missing');
     const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body:JSON.stringify({model:GROQ_MODEL,messages:safeMessages(systemPrompt),max_completion_tokens:1500,temperature:.7,reasoning_effort:'low'})});
-    if(!res.ok){const d=await res.text().catch(()=> ''); const e=new Error('Groq '+res.status+(d?' — '+d:'')); e.status=res.status; e.retryAfter=Number(res.headers.get('retry-after')||0); throw e;}
+    if(!res.ok){const d=await res.text().catch(()=> ''); const e=new Error('Groq '+res.status+(d?' — '+d:'')); e.status=res.status; throw e;}
     return res.json();
   }
   async function safeSend(text){
     if(busy) return; busy=true; sendBtn.disabled=true; history.push({role:'user',content:text});
     const bubble=addThinkingRow();
     try{
-      const ctx=BASE_SYSTEM_PROMPT+'\n\n'+timeContext()+'\n\n'+agendaContext()+'\n\n'+memoryContext()+'\n\n'+adjustmentsContext();
+      const ctx=BASE_SYSTEM_PROMPT+'\\n\\n'+timeContext()+'\\n\\n'+agendaContext()+'\\n\\n'+memoryContext()+'\\n\\n'+adjustmentsContext();
       let data;
       try{ data=await safeCall(ctx); }
       catch(firstErr){
@@ -68,7 +68,7 @@ frame.addEventListener('load',()=>{
     features.src='./ev-features.js?v=2';
     doc.body.appendChild(features);
     const wake=doc.createElement('script');
-    wake.src='./ev-wake.js?v=1';
+    wake.src='./ev-wake-v2.js?v=2';
     doc.body.appendChild(wake);
     const s=doc.createElement('script');
     s.textContent=PATCH;
