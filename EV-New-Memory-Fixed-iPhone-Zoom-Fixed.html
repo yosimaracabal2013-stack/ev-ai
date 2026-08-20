@@ -57,6 +57,7 @@ const PATCH = String.raw`(function(){
       bubble.textContent=err?.status===429?'Groq is rate-limiting E.V. for a moment. Try again in a few seconds.':'E.V. connection failed ('+(err?.status||'network')+'). Your message is still in the chat.'; scrollToEnd();
     }finally{ busy=false; sendBtn.disabled=false; input.focus(); }
   }
+  window.EVSend = safeSend;
   form.addEventListener('submit',function(e){e.preventDefault();e.stopImmediatePropagation();const text=input.value.trim();if(!text||busy)return;addRow('user',text);input.value='';input.style.height='auto';safeSend(text);},true);
 })();`;
 const frame=document.getElementById('evFrame');
@@ -64,8 +65,11 @@ frame.addEventListener('load',()=>{
   try{
     const doc=frame.contentDocument;
     const features=doc.createElement('script');
-    features.src='./ev-features.js?v=1';
+    features.src='./ev-features.js?v=2';
     doc.body.appendChild(features);
+    const wake=doc.createElement('script');
+    wake.src='./ev-wake.js?v=1';
+    doc.body.appendChild(wake);
     const s=doc.createElement('script');
     s.textContent=PATCH;
     doc.body.appendChild(s);
