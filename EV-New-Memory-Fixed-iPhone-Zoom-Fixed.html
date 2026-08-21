@@ -10,31 +10,50 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 </head>
 <body>
 <div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
-  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=11" title="E.V."></iframe>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=12" title="E.V."></iframe>
 </div>
 <script>
 'use strict';
 const frame=document.getElementById('evFrame');
+
+/* Keep the original E.V. interface and behavior. This wrapper only applies
+   compatibility fixes around the network request and the old microphone UI. */
 frame.addEventListener('load',()=>{
   try{
     const win=frame.contentWindow, doc=frame.contentDocument;
     const input=doc.getElementById('input'), send=doc.getElementById('send');
 
-    /* Keep E.V.'s original interface, personality, voice, memory, agenda,
-       weather/search updates, and response behavior. Only remove the old
-       microphone input / wake-word control that was causing the iPhone issues. */
+    /* Remove only the problematic microphone control. Voice playback stays on. */
     const style=doc.createElement('style');
     style.textContent='#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}';
     doc.head.appendChild(style);
     const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove();};
     removeMic();
 
-    /* Keep the original sender and BASE_SYSTEM_PROMPT intact.
-       Trim only the oldest conversation turns in outgoing Groq requests so
-       repeated messages do not eventually hit Groq's 413 payload limit.
-       If the newest user turn has an attached photo, ALWAYS send that actual
-       image to Groq's vision-capable model. Do not depend on what text the user
-       happened to type with the photo. */
+    /* Downsize attached photos before they ever reach Groq. The previous patch
+       sent the full iPhone photo as a base64 data URL, which could make the HTTP
+       request too large and produce the 413 error shown in the user's screenshot. */
+    function compressImage(dataUrl,maxSide=960,quality=.55){
+      return new Promise((resolve,reject)=>{
+        if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
+        const img=new Image();
+        img.onload=()=>{
+          try{
+            const scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+            const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+            const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+            const canvas=doc.createElement('canvas');
+            canvas.width=w; canvas.height=h;
+            const ctx=canvas.getContext('2d',{alpha:false});
+            ctx.drawImage(img,0,0,w,h);
+            resolve(canvas.toDataURL('image/jpeg',quality));
+          }catch(e){resolve(dataUrl);}
+        };
+        img.onerror=()=>resolve(dataUrl);
+        img.src=dataUrl;
+      });
+    }
+
     const originalFetch=win.fetch.bind(win);
     win.fetch=async function(url, options={}){
       try{
@@ -42,35 +61,38 @@ frame.addEventListener('load',()=>{
         if(target.includes('api.groq.com/openai/v1/chat/completions') && options && typeof options.body==='string'){
           const payload=JSON.parse(options.body);
           if(Array.isArray(payload.messages)){
+            /* Keep the system prompt plus only the newest few turns. This prevents
+               old chat history from growing until Groq rejects the request. */
             const system=payload.messages[0];
-            const recent=payload.messages.slice(1).slice(-8);
+            const recent=payload.messages.slice(1).slice(-4);
             payload.messages=[system,...recent];
 
-            const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
             const photoRows=[...doc.querySelectorAll('.row.user img.chat-img')];
             const lastPhoto=photoRows.length ? photoRows[photoRows.length-1] : null;
+            const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
 
-            /* The original E.V. code deliberately converts image history into
-               the text marker [photo attached] because GPT-OSS is text-only.
-               The wrapper now detects the actual rendered photo independently
-               of the user's typed words and replaces that newest user message
-               with a real multimodal message for Llama 4 Scout. */
             if(lastUserIndex>0 && lastPhoto && lastPhoto.src){
               const lastUser=payload.messages[lastUserIndex];
               const text=typeof lastUser.content==='string'
                 ? lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim()
                 : '';
-              const dataUrl=lastPhoto.src;
+              const smallImage=await compressImage(lastPhoto.src,960,.55);
+
+              /* Use Groq's vision model only for messages that actually contain
+                 a photo. Normal E.V. chat continues using the original model. */
               payload.model='meta-llama/llama-4-scout-17b-16e-instruct';
               payload.messages[lastUserIndex]={
                 role:'user',
                 content:[
                   {type:'text',text:text || 'Please look at this image and tell me what you see.'},
-                  {type:'image_url',image_url:{url:dataUrl}}
+                  {type:'image_url',image_url:{url:smallImage}}
                 ]
               };
-              payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||800,800);
+              payload.max_completion_tokens=700;
+            }else{
+              payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
             }
+
             options={...options,body:JSON.stringify(payload)};
           }
         }
@@ -78,9 +100,10 @@ frame.addEventListener('load',()=>{
       return originalFetch(url,options);
     };
 
-    /* Jarvis-style layer: text commands only. Normal E.V. chat is untouched. */
+    /* Keep the existing Jarvis/text-command layer. No automatic microphone or
+       wake-word listener is added here. */
     const jarvis=doc.createElement('script');
-    jarvis.src='./ev-jarvis-layer.js?v=1';
+    jarvis.src='./ev-jarvis-layer.js?v=2';
     jarvis.async=false;
     doc.body.appendChild(jarvis);
 
