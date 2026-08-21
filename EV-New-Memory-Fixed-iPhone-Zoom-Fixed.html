@@ -10,44 +10,43 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 </head>
 <body>
 <div id="evFrameWrap" style="width:100%;height:100%;overflow:hidden;background:#08090b">
-  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=12" title="E.V."></iframe>
+  <iframe id="evFrame" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed-original.html?v=13" title="E.V."></iframe>
 </div>
 <script>
 'use strict';
 const frame=document.getElementById('evFrame');
 
-/* Keep the original E.V. interface and behavior. This wrapper only applies
-   compatibility fixes around the network request and the old microphone UI. */
+/* E.V. compatibility layer.
+   Keep the original interface, personality, memory, voice playback, agenda,
+   weather/search behavior, and normal chat. Only patch the network request
+   size/error handling and remove the old microphone input control. */
 frame.addEventListener('load',()=>{
   try{
     const win=frame.contentWindow, doc=frame.contentDocument;
     const input=doc.getElementById('input'), send=doc.getElementById('send');
 
-    /* Remove only the problematic microphone control. Voice playback stays on. */
+    /* Remove only the old microphone control. Voice playback remains enabled. */
     const style=doc.createElement('style');
     style.textContent='#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}';
     doc.head.appendChild(style);
     const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove();};
     removeMic();
 
-    /* Downsize attached photos before they ever reach Groq. The previous patch
-       sent the full iPhone photo as a base64 data URL, which could make the HTTP
-       request too large and produce the 413 error shown in the user's screenshot. */
-    function compressImage(dataUrl,maxSide=960,quality=.55){
-      return new Promise((resolve,reject)=>{
+    function compressImage(dataUrl,maxSide=720,quality=.45){
+      return new Promise(resolve=>{
         if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
         const img=new Image();
         img.onload=()=>{
           try{
-            const scale=Math.min(1,maxSide/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
-            const w=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
-            const h=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+            const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+            const scale=Math.min(1,maxSide/Math.max(iw,ih));
+            const w=Math.max(1,Math.round(iw*scale)), h=Math.max(1,Math.round(ih*scale));
             const canvas=doc.createElement('canvas');
             canvas.width=w; canvas.height=h;
             const ctx=canvas.getContext('2d',{alpha:false});
             ctx.drawImage(img,0,0,w,h);
             resolve(canvas.toDataURL('image/jpeg',quality));
-          }catch(e){resolve(dataUrl);}
+          }catch(_){ resolve(dataUrl); }
         };
         img.onerror=()=>resolve(dataUrl);
         img.src=dataUrl;
@@ -56,54 +55,89 @@ frame.addEventListener('load',()=>{
 
     const originalFetch=win.fetch.bind(win);
     win.fetch=async function(url, options={}){
-      try{
-        const target=typeof url==='string' ? url : (url && url.url) || '';
-        if(target.includes('api.groq.com/openai/v1/chat/completions') && options && typeof options.body==='string'){
-          const payload=JSON.parse(options.body);
-          if(Array.isArray(payload.messages)){
-            /* Keep the system prompt plus only the newest few turns. This prevents
-               old chat history from growing until Groq rejects the request. */
-            const system=payload.messages[0];
-            const recent=payload.messages.slice(1).slice(-4);
-            payload.messages=[system,...recent];
+      const target=typeof url==='string' ? url : (url && url.url) || '';
+      if(!target.includes('api.groq.com/openai/v1/chat/completions') || !options || typeof options.body!=='string'){
+        return originalFetch(url,options);
+      }
 
-            const photoRows=[...doc.querySelectorAll('.row.user img.chat-img')];
-            const lastPhoto=photoRows.length ? photoRows[photoRows.length-1] : null;
-            const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
+      let payload;
+      try{ payload=JSON.parse(options.body); }
+      catch(_){ return originalFetch(url,options); }
 
-            if(lastUserIndex>0 && lastPhoto && lastPhoto.src){
-              const lastUser=payload.messages[lastUserIndex];
-              const text=typeof lastUser.content==='string'
-                ? lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim()
-                : '';
-              const smallImage=await compressImage(lastPhoto.src,960,.55);
+      if(!Array.isArray(payload.messages)) return originalFetch(url,options);
 
-              /* Use Groq's vision model only for messages that actually contain
-                 a photo. Normal E.V. chat continues using the original model. */
-              payload.model='meta-llama/llama-4-scout-17b-16e-instruct';
-              payload.messages[lastUserIndex]={
-                role:'user',
-                content:[
-                  {type:'text',text:text || 'Please look at this image and tell me what you see.'},
-                  {type:'image_url',image_url:{url:smallImage}}
-                ]
-              };
-              payload.max_completion_tokens=700;
-            }else{
-              payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
-            }
+      const system=payload.messages[0];
+      const recent=payload.messages.slice(1).slice(-4);
+      payload.messages=[system,...recent];
+      payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
 
-            options={...options,body:JSON.stringify(payload)};
+      /* Only attach an image when the CURRENT user row contains an image.
+         This prevents an old photo from being silently attached to later text. */
+      const userRows=[...doc.querySelectorAll('.row.user')];
+      const currentUserRow=userRows.length ? userRows[userRows.length-1] : null;
+      const currentPhoto=currentUserRow ? currentUserRow.querySelector('img.chat-img') : null;
+      const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
+
+      if(lastUserIndex>0 && currentPhoto && currentPhoto.src){
+        const lastUser=payload.messages[lastUserIndex];
+        const text=typeof lastUser.content==='string'
+          ? lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim()
+          : '';
+        const smallImage=await compressImage(currentPhoto.src,720,.45);
+        payload.model='openai/gpt-oss-120b';
+        payload.messages[lastUserIndex]={
+          role:'user',
+          content:[
+            {type:'text',text:text || 'Please look at this image and tell me what you see.'},
+            {type:'image_url',image_url:{url:smallImage}}
+          ]
+        };
+        payload.max_completion_tokens=500;
+      }
+
+      const patchedOptions={...options,body:JSON.stringify(payload)};
+      let response=await originalFetch(url,patchedOptions);
+
+      /* 413 = request too large. Retry with only the system prompt + newest
+         user turn and a smaller image. */
+      if(response.status===413){
+        try{ await response.text(); }catch(_){ }
+        const lastUser=payload.messages.slice().reverse().find(m=>m.role==='user');
+        const minimal={
+          ...payload,
+          messages:lastUser ? [system,lastUser] : [system],
+          max_completion_tokens:350
+        };
+        if(lastUser && Array.isArray(lastUser.content)){
+          const textPart=lastUser.content.find(p=>p.type==='text');
+          const imagePart=lastUser.content.find(p=>p.type==='image_url');
+          if(imagePart && imagePart.image_url && imagePart.image_url.url){
+            imagePart.image_url.url=await compressImage(imagePart.image_url.url,480,.35);
           }
+          minimal.messages=[system,{role:'user',content:[
+            {type:'text',text:textPart?.text || 'Please look at this image.'},
+            ...(imagePart ? [imagePart] : [])
+          ]}];
         }
-      }catch(err){console.warn('E.V. request compatibility patch skipped:',err);}
-      return originalFetch(url,options);
+        response=await originalFetch(url,{...options,body:JSON.stringify(minimal)});
+      }
+
+      /* 403/404 can happen when a Groq project blocks or cannot access the
+         selected model. Try Groq's currently supported Qwen 3.6 27B model
+         before giving up, while keeping GPT-OSS 120B as E.V.'s normal brain. */
+      if(response.status===403 || response.status===404){
+        try{ await response.text(); }catch(_){ }
+        const fallback={...payload,model:'qwen/qwen3.6-27b',max_completion_tokens:600};
+        response=await originalFetch(url,{...options,body:JSON.stringify(fallback)});
+      }
+
+      return response;
     };
 
-    /* Keep the existing Jarvis/text-command layer. No automatic microphone or
-       wake-word listener is added here. */
+    /* Keep text-command/Jarvis layer. No automatic microphone or wake-word
+       listener is added here. */
     const jarvis=doc.createElement('script');
-    jarvis.src='./ev-jarvis-layer.js?v=2';
+    jarvis.src='./ev-jarvis-layer.js?v=3';
     jarvis.async=false;
     doc.body.appendChild(jarvis);
 
