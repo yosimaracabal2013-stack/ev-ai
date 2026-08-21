@@ -18,14 +18,13 @@ const frame=document.getElementById('evFrame');
 
 /* E.V. compatibility layer.
    Keep the original interface, personality, memory, voice playback, agenda,
-   weather/search behavior, and normal chat. Only patch the network request
-   size/error handling and remove the old microphone input control. */
+   weather/search behavior, and normal chat. Only patch network reliability,
+   image handling, and remove the old microphone input control. */
 frame.addEventListener('load',()=>{
   try{
     const win=frame.contentWindow, doc=frame.contentDocument;
     const input=doc.getElementById('input'), send=doc.getElementById('send');
 
-    /* Remove only the old microphone control. Voice playback remains enabled. */
     const style=doc.createElement('style');
     style.textContent='#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}';
     doc.head.appendChild(style);
@@ -63,7 +62,6 @@ frame.addEventListener('load',()=>{
       let payload;
       try{ payload=JSON.parse(options.body); }
       catch(_){ return originalFetch(url,options); }
-
       if(!Array.isArray(payload.messages)) return originalFetch(url,options);
 
       const system=payload.messages[0];
@@ -71,8 +69,8 @@ frame.addEventListener('load',()=>{
       payload.messages=[system,...recent];
       payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
 
-      /* Only attach an image when the CURRENT user row contains an image.
-         This prevents an old photo from being silently attached to later text. */
+      /* Only use the image from the CURRENT user message. An old photo must
+         never be silently attached to a later text message. */
       const userRows=[...doc.querySelectorAll('.row.user')];
       const currentUserRow=userRows.length ? userRows[userRows.length-1] : null;
       const currentPhoto=currentUserRow ? currentUserRow.querySelector('img.chat-img') : null;
@@ -84,7 +82,9 @@ frame.addEventListener('load',()=>{
           ? lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim()
           : '';
         const smallImage=await compressImage(currentPhoto.src,720,.45);
-        payload.model='openai/gpt-oss-120b';
+        /* GPT-OSS 120B is text-only. Qwen 3.6 27B is Groq's current vision
+           model, so use it only for actual photo messages. */
+        payload.model='qwen/qwen3.6-27b';
         payload.messages[lastUserIndex]={
           role:'user',
           content:[
@@ -99,43 +99,55 @@ frame.addEventListener('load',()=>{
       let response=await originalFetch(url,patchedOptions);
 
       /* 413 = request too large. Retry with only the system prompt + newest
-         user turn and a smaller image. */
+         user turn and a much smaller image. */
       if(response.status===413){
         try{ await response.text(); }catch(_){ }
         const lastUser=payload.messages.slice().reverse().find(m=>m.role==='user');
-        const minimal={
-          ...payload,
-          messages:lastUser ? [system,lastUser] : [system],
-          max_completion_tokens:350
-        };
+        const minimal={...payload,messages:lastUser?[system,lastUser]:[system],max_completion_tokens:350};
         if(lastUser && Array.isArray(lastUser.content)){
           const textPart=lastUser.content.find(p=>p.type==='text');
           const imagePart=lastUser.content.find(p=>p.type==='image_url');
-          if(imagePart && imagePart.image_url && imagePart.image_url.url){
-            imagePart.image_url.url=await compressImage(imagePart.image_url.url,480,.35);
-          }
+          if(imagePart?.image_url?.url){ imagePart.image_url.url=await compressImage(imagePart.image_url.url,480,.35); }
           minimal.messages=[system,{role:'user',content:[
             {type:'text',text:textPart?.text || 'Please look at this image.'},
-            ...(imagePart ? [imagePart] : [])
+            ...(imagePart?[imagePart]:[])
           ]}];
         }
         response=await originalFetch(url,{...options,body:JSON.stringify(minimal)});
       }
 
-      /* 403/404 can happen when a Groq project blocks or cannot access the
-         selected model. Try Groq's currently supported Qwen 3.6 27B model
-         before giving up, while keeping GPT-OSS 120B as E.V.'s normal brain. */
+      /* 401 = the saved key was rejected. Give the user a clean chance to
+         replace it instead of trapping E.V. in the generic LINK DOWN loop. */
+      if(response.status===401){
+        try{ await response.text(); }catch(_){ }
+        const freshKey=prompt("E.V.'s Groq API key was rejected. Paste a new Groq API key to reconnect E.V.:");
+        if(freshKey && freshKey.trim()){
+          const key=freshKey.trim();
+          try{ localStorage.setItem('ev-groq-api-key',key); }catch(_){ }
+          response=await originalFetch(url,{...patchedOptions,headers:{...(options.headers||{}),Authorization:`Bearer ${key}`}});
+        }
+      }
+
+      /* 403/404 can happen when a project blocks a model or a model endpoint
+         changes. Qwen 3.6 27B is currently supported and also has vision. */
       if(response.status===403 || response.status===404){
         try{ await response.text(); }catch(_){ }
         const fallback={...payload,model:'qwen/qwen3.6-27b',max_completion_tokens:600};
         response=await originalFetch(url,{...options,body:JSON.stringify(fallback)});
       }
 
+      /* A short 429 retry handles a temporary rate-limit response. If the
+         account has exhausted its daily allowance, Groq will still return 429. */
+      if(response.status===429){
+        const retryAfter=Number(response.headers.get('retry-after')||'2');
+        try{ await response.text(); }catch(_){ }
+        await new Promise(r=>setTimeout(r,Math.min(Math.max(retryAfter,1),5)*1000));
+        response=await originalFetch(url,patchedOptions);
+      }
+
       return response;
     };
 
-    /* Keep text-command/Jarvis layer. No automatic microphone or wake-word
-       listener is added here. */
     const jarvis=doc.createElement('script');
     jarvis.src='./ev-jarvis-layer.js?v=3';
     jarvis.async=false;
