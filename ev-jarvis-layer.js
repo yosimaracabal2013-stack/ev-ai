@@ -1,4 +1,4 @@
-/* E.V. Jarvis layer — persistent memory, weather, reminders and text commands. No microphone/wake-word changes. */
+/* E.V. Jarvis layer — persistent memory, weather, reminders, text commands and safe browser actions. No microphone/wake-word changes. */
 (function(){
   'use strict';
   const w=window, MEMORY_KEY='ev-personal-memory-v1', REMINDER_KEY='ev-reminders-v1';
@@ -32,7 +32,6 @@
     say(hits.length?'I remember: '+hits.slice(-5).map(x=>x.text).join(' • '):`I don’t have anything saved about ${q}.`);
   }
 
-  // Add persistent memory to E.V.'s existing system prompt without replacing her personality.
   const originalFetch=w.fetch.bind(w);
   w.fetch=async function(url,options={}){
     try{
@@ -103,6 +102,23 @@
   function openTab(name){const tab=Array.from(document.querySelectorAll('.tab')).find(b=>String(b.dataset.tab||'').toLowerCase()===name);if(tab){tab.click();return true}return false}
   function challenge(){const a=['Take five minutes, stretch, drink some water, then come back.','Quick challenge: 20 squats, 20 seconds rest, then repeat once.','Five-minute focus challenge: put the phone down and finish one small task.'];say(a[Math.floor(Math.random()*a.length)])}
 
+  /* FIRST JARVIS UPGRADE: safe browser actions. These only open normal web
+     pages/tabs; they do not execute arbitrary code or control private accounts. */
+  function browserOpen(kind){
+    const sites={
+      youtube:'https://www.youtube.com/',
+      github:'https://github.com/',
+      google:'https://www.google.com/',
+      weather:'https://www.google.com/search?q=weather',
+      spotify:'https://open.spotify.com/'
+    };
+    const url=sites[kind];
+    if(!url)return false;
+    const tab=w.open(url,'_blank','noopener,noreferrer');
+    if(tab)say(`Opening ${kind}.`);else say(`I couldn't open ${kind}. Your browser may be blocking new tabs.`);
+    return true;
+  }
+
   async function handle(text){
     const q=clean(text).toLowerCase();if(!q)return false;
     let m=q.match(/^remember(?: that)?\s+(.+)$/i);if(m){remember(m[1]);return true}
@@ -119,6 +135,10 @@
     let tm=q.match(/^(?:start|set) (?:a )?timer(?: for)?\s*(\d+)\s*(minutes?|mins?|hours?|hrs?)?$/);if(tm){let mins=+tm[1];if(/hour|hr/i.test(tm[2]||''))mins*=60;timer(mins);return true}
     if(/^stop timer$|^cancel timer$/.test(q)){clearTimeout(timerId);timerId=null;say('Timer stopped.');return true}
     if(/^take a break$|^give me a challenge$/.test(q)){challenge();return true}
+    m=q.match(/^(?:open|launch|go to)\s+(youtube|github|google|spotify|weather)$/i);
+    if(m){browserOpen(m[1].toLowerCase());return true}
+    m=q.match(/^search(?: for)?\s+(.+)$/i);
+    if(m){const url='https://www.google.com/search?q='+encodeURIComponent(m[1]);const tab=w.open(url,'_blank','noopener,noreferrer');if(tab)say(`Searching for ${m[1]}.`);else say('I could not open the search page.');return true}
     m=q.match(/^remind me(?: to)?\s+(.+?)\s+(in\s+\d+\s*(?:minutes?|mins?|hours?|hrs?)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i);
     if(m){const when=parseWhen(m[2]);if(!when){say('Try “in 20 minutes” or “at 7 PM.”');return true}await requestNotifications();addReminder(m[1],when);say(`Okay. I’ll remind you ${new Date(when).toLocaleString()}.`);return true}
     return false;
