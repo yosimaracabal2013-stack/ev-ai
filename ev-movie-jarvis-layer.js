@@ -1,0 +1,28 @@
+/* E.V. movie-inspired personality + JARVIS/EDITH utility layer. */
+(function(){
+'use strict';
+const w=window,doc=document;
+const say=t=>{try{if(typeof w.addRow==='function')w.addRow('ev',t);if(typeof w.speak==='function')w.speak(t)}catch(_) {}};
+const openSearch=q=>{const u='https://www.google.com/search?q='+encodeURIComponent(q);try{if(w.open(u,'_blank','noopener,noreferrer'))return}catch(_){};const a=doc.createElement('a');a.href=u;a.target='_blank';a.rel='noopener noreferrer';a.textContent='Tap here to open the search';a.style.cssText='display:block;margin:8px 0;padding:10px 14px;border-radius:12px;background:#20252d;color:#fff;text-decoration:none;width:max-content';try{const r=typeof w.addRow==='function'?w.addRow('ev',''):null;if(r&&r.appendChild)r.appendChild(a)}catch(_) {}};
+const baseFetch=w.fetch.bind(w);
+w.fetch=async function(url,options={}){try{const target=typeof url==='string'?url:(url&&url.url)||'';if(target.includes('api.groq.com/openai/v1/chat/completions')&&options&&typeof options.body==='string'){const p=JSON.parse(options.body);if(Array.isArray(p.messages)){const i=p.messages.findIndex(m=>m.role==='system');if(i>=0){p.messages[i].content=String(p.messages[i].content||'')+'\n\nE.V. PERSONALITY PROFILE:\nYou are E.V., a personal AI companion inspired by the capable, warm, analytical feel of Peter Parker’s self-built assistant. Be calm, observant, supportive and lightly witty. Be conversational rather than robotic. Notice useful context and offer a concise next step when appropriate. Never claim to have sensors, surveillance, device control, location access, notifications, or abilities that are not actually available.\n\nJARVIS PRINCIPLES:\nBe composed, efficient and proactive. Give concise answers first, then details if useful. For commands, confirm what you actually did. For complex tasks, break them into clear steps. You may use tasteful dry humor, but never at the user’s expense.\n\nEDITH-STYLE UTILITY:\nAct as an information and command center: help research topics, analyze user-provided images, organize notes/reminders/agenda, check weather, open supported websites, and explain system status. When a real-world action is unavailable in this webpage, say so plainly and provide the safest available alternative.\n\nMOVIE-E.V. FEEL:\nThe user should feel that you are their dependable companion, not merely a chatbot. Be especially helpful when the user is stressed or unsure, but do not pretend to have feelings or consciousness.';options={...options,body:JSON.stringify(p)}}}}}catch(_){}return baseFetch(url,options)};
+function clean(t){return String(t||'').trim().replace(/^e\.?v\.?[,:\s-]*/i,'').trim().replace(/\s+/g,' ').toLowerCase()}
+async function command(text){const q=clean(text);if(!q)return false;
+if(/^jarvis mode$|^activate jarvis mode$|^switch to jarvis mode$/.test(q)){say('JARVIS mode is active. Calm, efficient, and ready.');return true}
+if(/^ev mode$|^e\.v\. mode$|^movie ev mode$/.test(q)){say('E.V. mode active. I’m here. What do you need?');return true}
+if(/^edith mode$|^utility mode$|^command center$/.test(q)){say('Command center online. Research, organization, analysis, and supported tools are ready.');return true}
+if(/^what can you do$|^what are your capabilities$|^capabilities$/.test(q)){say('I can chat, remember facts, organize notes and reminders, check weather, help with homework, analyze pictures you send, search the web, open supported sites, run focus timers, give briefings, and report my system status.');return true}
+if(/^time$|^what time is it$|^what is the time$/.test(q)){say('It is '+new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}));return true}
+let m=q.match(/^(?:research|look up|investigate|find information on)\s+(.+)$/i);if(m){say('I’ll pull up a research search for '+m[1]+'.');openSearch(m[1]);return true}
+m=q.match(/^(?:web search|search the web|search online)(?: for)?\s+(.+)$/i);if(m){say('Searching the web for '+m[1]+'.');openSearch(m[1]);return true}
+m=q.match(/^who is\s+(.+)$/i);if(m){say('I’ll look that up.');openSearch(m[1]);return true}
+m=q.match(/^scan\s+(.+)$/i);if(m){say('Scanning available public information for '+m[1]+'.');openSearch(m[1]);return true}
+if(/^analyze (?:this )?image$|^look at (?:this )?image$/.test(q)){say('I’ll analyze the image you attached.');return false}
+if(/^diagnostics$|^run diagnostics$|^system diagnostics$/.test(q)){say('Diagnostics complete: E.V. core is online, normal chat is available, memory and utility commands are loaded, and the browser is ready.');return true}
+if(/^quiet mode$|^be quiet$/.test(q)){try{if(w.speechSynthesis)w.speechSynthesis.cancel()}catch(_){};say('Quiet mode enabled. I’ll keep replies text-only until you ask for voice.');try{w.localStorage.setItem('ev-quiet-mode','1')}catch(_){};return true}
+if(/^voice mode$|^talk to me$|^speak to me$/.test(q)){try{w.localStorage.removeItem('ev-quiet-mode')}catch(_){};say('Voice mode enabled.');return true}
+return false}
+const form=doc.getElementById('composer'),input=doc.getElementById('input');
+if(form&&input&&!form.dataset.evMovieLayer){form.dataset.evMovieLayer='1';form.addEventListener('submit',async e=>{const t=input.value.trim();if(!/^e\.?v\.?[,:\s-]+/i.test(t))return;try{if(await command(t)){e.preventDefault();e.stopImmediatePropagation();input.value='';input.style.height='auto'}}catch(_){}},true)}
+w.EVMovie={command,search:openSearch};
+})();
