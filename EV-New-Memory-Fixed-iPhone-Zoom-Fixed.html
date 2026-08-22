@@ -15,148 +15,44 @@ html,body,iframe{margin:0;width:100%;height:100%;border:0;padding:0;display:bloc
 <script>
 'use strict';
 const frame=document.getElementById('evFrame');
-
-/* E.V. compatibility layer.
-   Keep the original interface, personality, memory, voice playback, agenda,
-   weather/search behavior, and normal chat. Only patch network reliability,
-   image handling, and remove the old microphone input control. */
 frame.addEventListener('load',()=>{
   try{
-    const win=frame.contentWindow, doc=frame.contentDocument;
-    const input=doc.getElementById('input'), send=doc.getElementById('send');
-
+    const win=frame.contentWindow,doc=frame.contentDocument;
+    const input=doc.getElementById('input'),send=doc.getElementById('send');
     const style=doc.createElement('style');
     style.textContent='#micBtn{display:none!important;visibility:hidden!important;pointer-events:none!important}';
     doc.head.appendChild(style);
-    const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove();};
+    const removeMic=()=>{const e=doc.getElementById('micBtn');if(e)e.remove()};
     removeMic();
-
-    function compressImage(dataUrl,maxSide=720,quality=.45){
-      return new Promise(resolve=>{
-        if(!dataUrl || !dataUrl.startsWith('data:image/')) return resolve(dataUrl);
-        const img=new Image();
-        img.onload=()=>{
-          try{
-            const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
-            const scale=Math.min(1,maxSide/Math.max(iw,ih));
-            const w=Math.max(1,Math.round(iw*scale)), h=Math.max(1,Math.round(ih*scale));
-            const canvas=doc.createElement('canvas');
-            canvas.width=w; canvas.height=h;
-            const ctx=canvas.getContext('2d',{alpha:false});
-            ctx.drawImage(img,0,0,w,h);
-            resolve(canvas.toDataURL('image/jpeg',quality));
-          }catch(_){ resolve(dataUrl); }
-        };
-        img.onerror=()=>resolve(dataUrl);
-        img.src=dataUrl;
-      });
-    }
-
+    function compressImage(dataUrl,maxSide=720,quality=.45){return new Promise(resolve=>{if(!dataUrl||!dataUrl.startsWith('data:image/'))return resolve(dataUrl);const img=new Image();img.onload=()=>{try{const iw=img.naturalWidth||img.width,ih=img.naturalHeight||img.height,scale=Math.min(1,maxSide/Math.max(iw,ih)),w=Math.max(1,Math.round(iw*scale)),h=Math.max(1,Math.round(ih*scale)),canvas=doc.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(img,0,0,w,h);resolve(canvas.toDataURL('image/jpeg',quality))}catch(_){resolve(dataUrl)}};img.onerror=()=>resolve(dataUrl);img.src=dataUrl})}
     const originalFetch=win.fetch.bind(win);
-    win.fetch=async function(url, options={}){
-      const target=typeof url==='string' ? url : (url && url.url) || '';
-      if(!target.includes('api.groq.com/openai/v1/chat/completions') || !options || typeof options.body!=='string'){
-        return originalFetch(url,options);
-      }
-
-      let payload;
-      try{ payload=JSON.parse(options.body); }
-      catch(_){ return originalFetch(url,options); }
-      if(!Array.isArray(payload.messages)) return originalFetch(url,options);
-
-      const system=payload.messages[0];
-      const recent=payload.messages.slice(1).slice(-4);
-      payload.messages=[system,...recent];
-      payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
-
-      /* Only use the image from the CURRENT user message. An old photo must
-         never be silently attached to a later text message. */
-      const userRows=[...doc.querySelectorAll('.row.user')];
-      const currentUserRow=userRows.length ? userRows[userRows.length-1] : null;
-      const currentPhoto=currentUserRow ? currentUserRow.querySelector('img.chat-img') : null;
-      const lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
-
-      if(lastUserIndex>0 && currentPhoto && currentPhoto.src){
-        const lastUser=payload.messages[lastUserIndex];
-        const text=typeof lastUser.content==='string'
-          ? lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim()
-          : '';
-        const smallImage=await compressImage(currentPhoto.src,720,.45);
-        /* GPT-OSS 120B is text-only. Qwen 3.6 27B is Groq's current vision
-           model, so use it only for actual photo messages. */
-        payload.model='qwen/qwen3.6-27b';
-        payload.messages[lastUserIndex]={
-          role:'user',
-          content:[
-            {type:'text',text:text || 'Please look at this image and tell me what you see.'},
-            {type:'image_url',image_url:{url:smallImage}}
-          ]
-        };
-        payload.max_completion_tokens=500;
-      }
-
-      const patchedOptions={...options,body:JSON.stringify(payload)};
-      let response=await originalFetch(url,patchedOptions);
-
-      /* 413 = request too large. Retry with only the system prompt + newest
-         user turn and a much smaller image. */
-      if(response.status===413){
-        try{ await response.text(); }catch(_){ }
-        const lastUser=payload.messages.slice().reverse().find(m=>m.role==='user');
-        const minimal={...payload,messages:lastUser?[system,lastUser]:[system],max_completion_tokens:350};
-        if(lastUser && Array.isArray(lastUser.content)){
-          const textPart=lastUser.content.find(p=>p.type==='text');
-          const imagePart=lastUser.content.find(p=>p.type==='image_url');
-          if(imagePart?.image_url?.url){ imagePart.image_url.url=await compressImage(imagePart.image_url.url,480,.35); }
-          minimal.messages=[system,{role:'user',content:[
-            {type:'text',text:textPart?.text || 'Please look at this image.'},
-            ...(imagePart?[imagePart]:[])
-          ]}];
-        }
-        response=await originalFetch(url,{...options,body:JSON.stringify(minimal)});
-      }
-
-      /* 401 = the saved key was rejected. Give the user a clean chance to
-         replace it instead of trapping E.V. in the generic LINK DOWN loop. */
-      if(response.status===401){
-        try{ await response.text(); }catch(_){ }
-        const freshKey=prompt("E.V.'s Groq API key was rejected. Paste a new Groq API key to reconnect E.V.:");
-        if(freshKey && freshKey.trim()){
-          const key=freshKey.trim();
-          try{ localStorage.setItem('ev-groq-api-key',key); }catch(_){ }
-          response=await originalFetch(url,{...patchedOptions,headers:{...(options.headers||{}),Authorization:`Bearer ${key}`}});
-        }
-      }
-
-      /* 403/404 can happen when a project blocks a model or a model endpoint
-         changes. Qwen 3.6 27B is currently supported and also has vision. */
-      if(response.status===403 || response.status===404){
-        try{ await response.text(); }catch(_){ }
-        const fallback={...payload,model:'qwen/qwen3.6-27b',max_completion_tokens:600};
-        response=await originalFetch(url,{...options,body:JSON.stringify(fallback)});
-      }
-
-      /* A short 429 retry handles a temporary rate-limit response. If the
-         account has exhausted its daily allowance, Groq will still return 429. */
-      if(response.status===429){
-        const retryAfter=Number(response.headers.get('retry-after')||'2');
-        try{ await response.text(); }catch(_){ }
-        await new Promise(r=>setTimeout(r,Math.min(Math.max(retryAfter,1),5)*1000));
-        response=await originalFetch(url,patchedOptions);
-      }
-
+    win.fetch=async function(url,options={}){
+      const target=typeof url==='string'?url:(url&&url.url)||'';
+      if(!target.includes('api.groq.com/openai/v1/chat/completions')||!options||typeof options.body!=='string')return originalFetch(url,options);
+      let payload;try{payload=JSON.parse(options.body)}catch(_){return originalFetch(url,options)}
+      if(!Array.isArray(payload.messages))return originalFetch(url,options);
+      const system=payload.messages[0],recent=payload.messages.slice(1).slice(-4);payload.messages=[system,...recent];payload.max_completion_tokens=Math.min(Number(payload.max_completion_tokens)||900,900);
+      const userRows=[...doc.querySelectorAll('.row.user')],currentUserRow=userRows.length?userRows[userRows.length-1]:null,currentPhoto=currentUserRow?currentUserRow.querySelector('img.chat-img'):null,lastUserIndex=payload.messages.map(m=>m.role).lastIndexOf('user');
+      if(lastUserIndex>0&&currentPhoto&&currentPhoto.src){const lastUser=payload.messages[lastUserIndex],text=typeof lastUser.content==='string'?lastUser.content.replace(/^\[photo attached\]\s*/i,'').trim():'';const smallImage=await compressImage(currentPhoto.src,720,.45);payload.model='qwen/qwen3.6-27b';payload.messages[lastUserIndex]={role:'user',content:[{type:'text',text:text||'Please look at this image and tell me what you see.'},{type:'image_url',image_url:{url:smallImage}}]};payload.max_completion_tokens=500}
+      const patchedOptions={...options,body:JSON.stringify(payload)};let response=await originalFetch(url,patchedOptions);
+      if(response.status===413){try{await response.text()}catch(_){}const lastUser=payload.messages.slice().reverse().find(m=>m.role==='user'),minimal={...payload,messages:lastUser?[system,lastUser]:[system],max_completion_tokens:350};if(lastUser&&Array.isArray(lastUser.content)){const textPart=lastUser.content.find(p=>p.type==='text'),imagePart=lastUser.content.find(p=>p.type==='image_url');if(imagePart?.image_url?.url)imagePart.image_url.url=await compressImage(imagePart.image_url.url,480,.35);minimal.messages=[system,{role:'user',content:[{type:'text',text:textPart?.text||'Please look at this image.'},...(imagePart?[imagePart]:[])]}]}response=await originalFetch(url,{...options,body:JSON.stringify(minimal)})}
+      if(response.status===401){try{await response.text()}catch(_){}const freshKey=prompt("E.V.'s Groq API key was rejected. Paste a new Groq API key to reconnect E.V.:");if(freshKey&&freshKey.trim()){const key=freshKey.trim();try{localStorage.setItem('ev-groq-api-key',key)}catch(_){}response=await originalFetch(url,{...patchedOptions,headers:{...(options.headers||{}),Authorization:`Bearer ${key}`}})}}
+      if(response.status===403||response.status===404){try{await response.text()}catch(_){}const fallback={...payload,model:'qwen/qwen3.6-27b',max_completion_tokens:600};response=await originalFetch(url,{...options,body:JSON.stringify(fallback)})}
+      if(response.status===429){const retryAfter=Number(response.headers.get('retry-after')||'2');try{await response.text()}catch(_){}await new Promise(r=>setTimeout(r,Math.min(Math.max(retryAfter,1),5)*1000));response=await originalFetch(url,patchedOptions)}
       return response;
     };
-
-    const jarvis=doc.createElement('script');
-    jarvis.src='./ev-jarvis-layer.js?v=3';
-    jarvis.async=false;
-    doc.body.appendChild(jarvis);
-
-    if(send) send.addEventListener('click',()=>removeMic(),true);
-    if(input) input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey)removeMic();},true);
-    removeMic();
-  }catch(err){console.error('E.V. compatibility patch failed',err);}
+    const jarvis=doc.createElement('script');jarvis.src='./ev-jarvis-layer.js?v=4';jarvis.async=false;doc.body.appendChild(jarvis);
+    const mic=doc.createElement('button');mic.id='evListenToggle';mic.type='button';mic.textContent='🎙️ E.V. Listening: OFF';mic.style.cssText='position:fixed;z-index:99999;right:12px;top:calc(env(safe-area-inset-top) + 12px);padding:10px 12px;border:1px solid rgba(255,255,255,.2);border-radius:14px;background:#171a20;color:#fff;font:600 13px system-ui;box-shadow:0 6px 20px rgba(0,0,0,.3)';doc.body.appendChild(mic);
+    const SR=win.SpeechRecognition||win.webkitSpeechRecognition;
+    if(!SR){mic.textContent='🎙️ Voice unavailable';mic.disabled=true;return}
+    let listening=false,armed=false,recognition=null,restarting=false;
+    function setState(on){listening=on;mic.textContent=on?'🎙️ E.V. Listening: ON':'🎙️ E.V. Listening: OFF';mic.style.opacity=on?'1':'.8'}
+    function speakWake(){try{if(typeof win.speak==='function')win.speak('I’m listening.')}catch(_) {}}
+    function submitText(text){const clean=String(text||'').trim();if(!clean||!input)return;input.value=clean;input.dispatchEvent(new Event('input',{bubbles:true}));if(send)send.click();else input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',bubbles:true}))}
+    function makeRecognition(){recognition=new SR();recognition.lang='en-US';recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=3;recognition.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i],heard=String(r[0]?.transcript||'').trim();if(!heard)continue;const m=heard.match(/^e\.?v\.?[,:\s-]*(.*)$/i);if(m&&r.isFinal){const command=m[1].trim();if(command){submitText(command.startsWith('E.V.')?command:`E.V., ${command}`)}else{armed=true;speakWake()}return}if(armed&&r.isFinal){armed=false;submitText('E.V., '+heard);return}}};recognition.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){setState(false);mic.textContent='🎙️ Microphone blocked';listening=false}else if(listening&&!restarting){restarting=true;setTimeout(()=>{restarting=false;if(listening)try{recognition.start()}catch(_){ }},700)}};recognition.onend=()=>{if(listening&&!restarting){restarting=true;setTimeout(()=>{restarting=false;if(listening)try{recognition.start()}catch(_){ }},400)}}}
+    mic.addEventListener('click',async()=>{if(listening){setState(false);try{recognition&&recognition.stop()}catch(_){}return}makeRecognition();setState(true);try{await win.navigator.mediaDevices?.getUserMedia?.({audio:true})}catch(_){}try{recognition.start()}catch(_){} });
+    if(send)send.addEventListener('click',()=>removeMic(),true);if(input)input.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey)removeMic()},true);removeMic();
+  }catch(err){console.error('E.V. compatibility patch failed',err)}
 });
 </script>
 </body>
