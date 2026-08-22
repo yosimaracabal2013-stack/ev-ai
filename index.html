@@ -10,7 +10,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020504}#ev
 </head>
 <body>
 <div id="loading">E.V. CORE // INITIALIZING</div>
-<iframe id="ev" src="./EV_index_phone_fit.html?v=hud2" title="E.V. Core"></iframe>
+<iframe id="ev" src="./EV-New-Memory-Fixed-iPhone-Zoom-Fixed.html?v=core3" title="E.V. Core" allow="microphone"></iframe>
 <script>
 const f=document.getElementById('ev'),l=document.getElementById('loading');
 function loadScript(d,src){return new Promise(resolve=>{const s=d.createElement('script');s.src=src;s.onload=()=>resolve(true);s.onerror=()=>resolve(false);d.body.appendChild(s);});}
@@ -22,14 +22,14 @@ html,body{background:#020504!important;color:var(--text)!important;width:100%!im
 .sysbar{padding:6px 14px 2px!important;gap:10px!important}.sysitem{background:rgba(2,15,11,.55);border:1px solid rgba(57,233,145,.12);padding:5px 8px;border-radius:6px}.sysitem .val{color:var(--amber)!important}.sysitem .lbl{color:#527d69!important}
 #coreWrap{height:190px!important}#core{width:190px!important;height:190px!important;filter:drop-shadow(0 0 18px rgba(57,233,145,.38))}#coreStatus{font-size:10px!important;letter-spacing:4px!important;color:var(--amber)!important;text-shadow:0 0 10px rgba(57,233,145,.45)}
 .controls-row button,.tab{background:rgba(3,18,13,.6)!important;border-color:rgba(57,233,145,.3)!important;color:var(--amber)!important;border-radius:7px!important}.tab.active{border-color:var(--amber)!important;box-shadow:0 0 14px rgba(57,233,145,.12) inset}.tabs{overflow-x:auto!important}.bubble{border-radius:10px!important;background:rgba(3,18,13,.72)!important;box-shadow:0 8px 28px rgba(0,0,0,.22)!important}.row.ev .bubble{border-left:2px solid var(--amber)!important;background:linear-gradient(90deg,rgba(57,233,145,.08),rgba(3,18,13,.58))!important}.row.user .bubble{background:rgba(15,17,19,.82)!important}#input{background:rgba(3,18,13,.88)!important;border:1px solid rgba(57,233,145,.25)!important;border-radius:9px!important}#send{border-radius:9px!important}.ticker{background:#020504!important;border-color:var(--line)!important}.ticker span{color:#39785c!important}.agenda-form{border-color:rgba(57,233,145,.18)!important;background:rgba(3,18,13,.72)!important;border-radius:10px!important}.agenda-form input{background:#020805!important;border-color:rgba(57,233,145,.18)!important;border-radius:8px!important}.agenda-form button{border-color:var(--amber)!important;color:var(--amber)!important;border-radius:8px!important}.agenda-item{border-left-color:var(--amber)!important;border-radius:8px!important;background:rgba(57,233,145,.06)!important}
+#evListenToggle,#evVoiceReply,#evDashboard{border-color:rgba(57,233,145,.35)!important;background:rgba(2,12,8,.92)!important;color:#c3ffe3!important;box-shadow:0 0 18px rgba(57,233,145,.12)!important}
 @media(max-width:700px){.statusbar{height:52px!important}.statusbar .clock{font-size:12px!important}header h1{font-size:18px!important;letter-spacing:8px!important}.sysbar{gap:5px!important}.sysitem{padding:4px 5px!important}.sysitem .val{font-size:9px!important}.sysitem .lbl{font-size:6px!important}#coreWrap{height:155px!important}#core{width:155px!important;height:155px!important}.tabs{justify-content:flex-start!important}.bubble{font-size:13px!important}}
 `;d.head.appendChild(s);
 const h=d.createElement('div');h.innerHTML='<div class="ev-scan"></div><div class="ev-vignette"></div>';h.id='evHud';
 const a=d.createElement('style');a.textContent=`#evHud{position:fixed;inset:0;pointer-events:none;z-index:1}.ev-scan{position:absolute;left:0;right:0;top:-2px;height:2px;background:linear-gradient(90deg,transparent,rgba(57,233,145,.22),transparent);box-shadow:0 0 14px rgba(57,233,145,.25);animation:evscan 7s linear infinite}.ev-vignette{position:absolute;inset:0;box-shadow:inset 0 0 120px rgba(0,0,0,.7)}@keyframes evscan{to{transform:translateY(120vh)}}`;d.head.appendChild(a);d.body.appendChild(h);
-// Restore the add-on layers that were already built for E.V.; the HUD is only a shell.
-await loadScript(d,'./ev-features.js?v=hud2');
-await loadScript(d,'./ev-jarvis-layer.js?v=hud2');
-await loadScript(d,'./ev-movie-jarvis-layer.js?v=hud2');
+// Keep the rich E.V. build underneath the new animated HUD. It already contains memory, agenda, image vision, voice replies and wake-word controls.
+await loadScript(d,'./ev-features.js?v=core3');
+await loadScript(d,'./ev-movie-jarvis-layer.js?v=core3');
 l.classList.add('hide');
 };
 </script>
