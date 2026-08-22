@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>E.V. CORE</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#020504}#ev{position:fixed;inset:0;width:100%;height:100%;border:0;background:#020504}#loading{position:fixed;inset:0;display:grid;place-items:center;background:#020504;color:#39e991;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:4px;z-index:9}#loading.hide{display:none}
+</style>
+</head>
+<body>
+<div id="loading">E.V. CORE // INITIALIZING</div>
+<iframe id="ev" src="./EV_index_phone_fit.html?v=hud1" title="E.V. Core"></iframe>
+<script>
+const f=document.getElementById('ev'),l=document.getElementById('loading');
+f.onload=()=>{const d=f.contentDocument;if(!d)return;l.classList.add('hide');const s=d.createElement('style');s.textContent=`
+:root{--void:#020504!important;--panel:rgba(3,18,13,.86)!important;--line:rgba(57,233,145,.22)!important;--amber:#39e991!important;--amber-dim:#15905c!important;--amber-hot:#c3ffe3!important;--text:#e6fff1!important;--text-dim:#608c78!important}
+html,body{background:#020504!important;color:var(--text)!important;width:100%!important;height:100%!important;overflow:hidden!important}body{background:radial-gradient(circle at 50% 42%,rgba(57,233,145,.13),transparent 28%),#020504!important;display:block!important}.frame{width:100%!important;max-width:none!important;height:100dvh!important;border:0!important;background:transparent!important;overflow:hidden!important}.frame:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(rgba(57,233,145,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(57,233,145,.025) 1px,transparent 1px);background-size:24px 24px;z-index:0}
+.statusbar{height:54px!important;padding:8px 14px!important;border-bottom:1px solid var(--line)!important;background:rgba(1,8,6,.84)!important;backdrop-filter:blur(8px)}.statusbar .brand,.statusbar .right{color:var(--amber)!important;text-shadow:0 0 12px rgba(57,233,145,.45)}.statusbar .clock{font-size:16px!important;color:#d9ffe9!important}.statusbar .clock .date{font-size:8px!important}header{padding:10px 12px 2px!important}header h1{font-size:20px!important;letter-spacing:10px!important;text-shadow:0 0 18px rgba(57,233,145,.8)!important}header .sub{color:#6fa68e!important}
+.sysbar{padding:6px 14px 2px!important;gap:10px!important}.sysitem{background:rgba(2,15,11,.55);border:1px solid rgba(57,233,145,.12);padding:5px 8px;border-radius:6px}.sysitem .val{color:var(--amber)!important}.sysitem .lbl{color:#527d69!important}
+#coreWrap{height:190px!important}#core{width:190px!important;height:190px!important;filter:drop-shadow(0 0 18px rgba(57,233,145,.38))}#coreStatus{font-size:10px!important;letter-spacing:4px!important;color:var(--amber)!important;text-shadow:0 0 10px rgba(57,233,145,.45)}
+.controls-row button,.tab{background:rgba(3,18,13,.6)!important;border-color:rgba(57,233,145,.3)!important;color:var(--amber)!important;border-radius:7px!important}.tab.active{border-color:var(--amber)!important;box-shadow:0 0 14px rgba(57,233,145,.12) inset}.tabs{overflow-x:auto!important}.bubble{border-radius:10px!important;background:rgba(3,18,13,.72)!important;box-shadow:0 8px 28px rgba(0,0,0,.22)!important}.row.ev .bubble{border-left:2px solid var(--amber)!important;background:linear-gradient(90deg,rgba(57,233,145,.08),rgba(3,18,13,.58))!important}.row.user .bubble{background:rgba(15,17,19,.82)!important}#input{background:rgba(3,18,13,.88)!important;border:1px solid rgba(57,233,145,.25)!important;border-radius:9px!important}#send{border-radius:9px!important}.ticker{background:#020504!important;border-color:var(--line)!important}.ticker span{color:#39785c!important}.agenda-form{border-color:rgba(57,233,145,.18)!important;background:rgba(3,18,13,.72)!important;border-radius:10px!important}.agenda-form input{background:#020805!important;border-color:rgba(57,233,145,.18)!important;border-radius:8px!important}.agenda-form button{border-color:var(--amber)!important;color:var(--amber)!important;border-radius:8px!important}.agenda-item{border-left-color:var(--amber)!important;border-radius:8px!important;background:rgba(57,233,145,.06)!important}
+@media(max-width:700px){.statusbar{height:52px!important}.statusbar .clock{font-size:12px!important}header h1{font-size:18px!important;letter-spacing:8px!important}.sysbar{gap:5px!important}.sysitem{padding:4px 5px!important}.sysitem .val{font-size:9px!important}.sysitem .lbl{font-size:6px!important}#coreWrap{height:155px!important}#core{width:155px!important;height:155px!important}.tabs{justify-content:flex-start!important}.bubble{font-size:13px!important}}
+`;d.head.appendChild(s);const h=d.createElement('div');h.innerHTML='<div class="ev-scan"></div><div class="ev-vignette"></div>';h.id='evHud';const a=d.createElement('style');a.textContent=`#evHud{position:fixed;inset:0;pointer-events:none;z-index:1}.ev-scan{position:absolute;left:0;right:0;top:-2px;height:2px;background:linear-gradient(90deg,transparent,rgba(57,233,145,.22),transparent);box-shadow:0 0 14px rgba(57,233,145,.25);animation:evscan 7s linear infinite}.ev-vignette{position:absolute;inset:0;box-shadow:inset 0 0 120px rgba(0,0,0,.7)}@keyframes evscan{to{transform:translateY(120vh)}}`;d.head.appendChild(a);d.body.appendChild(h)};
+</script>
+</body>
+</html>
