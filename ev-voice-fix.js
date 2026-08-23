@@ -1,4 +1,4 @@
-/* E.V. cinematic voice layer v5 — warm, poised, Australian-leaning cinematic delivery. */
+/* E.V. cinematic voice layer v6 — fallback only; neural voice layer owns the selector when available. */
 (function(){
   'use strict';
   const synth=window.speechSynthesis;
@@ -7,27 +7,24 @@
   let token=0,speaking=false,keepAlive=null,voices=[];
   const DEFAULT_NAME='Karen';
   function refresh(){try{voices=synth.getVoices?synth.getVoices():[]}catch(_){voices=[]}return voices}
-  function isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1)}
+  function neuralActive(){return !!window.__EV_NEURAL_VOICE__}
   function choose(){
     const sel=document.getElementById('voiceSelect'), list=refresh();
     const wanted=sel&&String(sel.value||'').trim();
     if(wanted){const x=list.find(v=>v.name===wanted||v.voiceURI===wanted);if(x)return x}
-    const prefs=isIOS()
-      ? [/^Karen$/i,v=>/en[-_]AU/i.test(v.lang||'')&&/female|karen|australian/i.test(v.name||''),/^Samantha$/i,/^Ava$/i,/^Moira$/i,v=>/en[-_]US/i.test(v.lang||''),v=>/^en[-_]/i.test(v.lang||'')]
-      : [/^Karen$/i,v=>/en[-_]AU/i.test(v.lang||''),/^Samantha$/i,/^Ava$/i,v=>/en[-_]GB/i.test(v.lang||''),v=>/en[-_]US/i.test(v.lang||''),v=>/^en[-_]/i.test(v.lang||'')];
+    const prefs=[/^Karen$/i,v=>/en[-_]AU/i.test(v.lang||''),/^Samantha$/i,/^Ava$/i,/^Moira$/i,v=>/en[-_]US/i.test(v.lang||''),v=>/^en[-_]/i.test(v.lang||'')];
     for(const p of prefs){const x=list.find(typeof p==='function'?p:(v=>p.test(v.name||'')));if(x)return x}
     return list[0]||null;
   }
   function syncMenu(){
+    if(neuralActive()) return;
     const sel=document.getElementById('voiceSelect');if(!sel)return;
-    const list=refresh();
-    if(!list.length)return;
+    const list=refresh();if(!list.length)return;
     const preferred=['Karen','Samantha','Ava','Moira','Daniel'];
     const available=[];
     for(const name of preferred){const v=list.find(x=>x.name===name);if(v&&!available.some(a=>a.name===v.name))available.push(v)}
-    const current=sel.value;
     if(!available.length)return;
-    sel.innerHTML='';
+    const current=sel.value;sel.innerHTML='';
     available.forEach(v=>{const o=document.createElement('option');o.value=v.name;o.textContent=v.name+' ('+v.lang+')';sel.appendChild(o)});
     sel.value=available.some(v=>v.name===current)?current:(available.find(v=>v.name===DEFAULT_NAME)?.name||available[0].name);
   }
@@ -46,20 +43,11 @@
   function speakReliable(text){
     if(localStorage.getItem('ev-voice-replies')==='0'||localStorage.getItem('ev-quiet-mode')==='1')return;
     const ps=parts(text);if(!ps.length)return;const me=++token;speaking=true;ui(true);clear();session();try{synth.cancel();synth.resume()}catch(_){}
-    const start=()=>{
-      if(me!==token)return;let i=0;syncMenu();
-      function make(t){const v=choose(),u=new SpeechSynthesisUtterance(t);if(v)u.voice=v;u.lang=v&&v.lang?v.lang:'en-US';
-        /* Cinematic E.V. delivery: unhurried, low-energy, precise, warm, never chirpy. */
-        u.rate=0.82;u.pitch=0.90;u.volume=1;return u}
-      while(i<ps.length){const u=make(ps[i++]);u.onend=()=>{if(me===token&&!synth.speaking&&!synth.pending&&i>=ps.length){speaking=false;ui(false);clear()}};u.onerror=()=>{};try{synth.speak(u)}catch(_){}
-      }
-    };
-    if(refresh().length) setTimeout(start,60); else if('onvoiceschanged' in synth){const f=()=>{synth.removeEventListener('voiceschanged',f);start()};synth.addEventListener('voiceschanged',f);setTimeout(start,900)} else start();
+    const start=()=>{if(me!==token)return;let i=0;function make(t){const v=choose(),u=new SpeechSynthesisUtterance(t);if(v)u.voice=v;u.lang=v&&v.lang?v.lang:'en-US';u.rate=0.82;u.pitch=0.90;u.volume=1;return u}while(i<ps.length){const u=make(ps[i++]);u.onend=()=>{if(me===token&&!synth.speaking&&!synth.pending&&i>=ps.length){speaking=false;ui(false);clear()}};u.onerror=()=>{};try{synth.speak(u)}catch(_){} }};
+    if(refresh().length)setTimeout(start,60);else if('onvoiceschanged' in synth){const f=()=>{synth.removeEventListener('voiceschanged',f);start()};synth.addEventListener('voiceschanged',f);setTimeout(start,900)}else start();
     keepAlive=setInterval(()=>{if(me!==token)return;session();try{if(synth.paused)synth.resume()}catch(_){}},2000);
   }
-  window.speak=speakReliable;
   window.EVReliableVoice={speak:speakReliable,stop:function(){token++;speaking=false;ui(false);clear();try{synth.cancel();synth.resume()}catch(_){}},isSpeaking:function(){return speaking}};
   window.addEventListener('pageshow',()=>{refresh();syncMenu();session();try{if(synth.paused)synth.resume()}catch(_){}},{passive:true});
   document.addEventListener('visibilitychange',()=>{session();if(document.visibilityState==='visible'){try{if(synth.paused)synth.resume()}catch(_){}}},{passive:true});
-  document.addEventListener('click',()=>{refresh();syncMenu();session();try{synth.resume()}catch(_){}},{passive:true,capture:true});
 })();
