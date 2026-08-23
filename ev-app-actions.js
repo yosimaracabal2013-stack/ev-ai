@@ -1,49 +1,25 @@
-/* E.V. app actions — safe browser/app launcher, isolated from core brain. */
+/* E.V. app actions + visual memory — browser-only, no paid API. */
 (function(){
   'use strict';
   const form=document.getElementById('composer'), input=document.getElementById('input');
   if(!form||!input) return;
   const say=t=>{try{if(typeof addRow==='function')addRow('ev',t);if(typeof speak==='function')speak(t)}catch(_) {}};
-  const apps={
-    youtube:{label:'YouTube',url:'https://www.youtube.com/'},
-    spotify:{label:'Spotify',url:'https://open.spotify.com/'},
-    google:{label:'Google',url:'https://www.google.com/'},
-    maps:{label:'Google Maps',url:'https://www.google.com/maps/'},
-    github:{label:'GitHub',url:'https://github.com/'},
-    gmail:{label:'Gmail',url:'https://mail.google.com/'},
-    messages:{label:'Messages',url:'sms:'},
-    phone:{label:'Phone',url:'tel:'}
-  };
-  function showLink(app){
-    const item=apps[app]; if(!item)return false;
-    let opened=false;
-    try{opened=!!window.open(item.url,'_blank','noopener,noreferrer')}catch(_){}
-    if(opened)return true;
-    const row=typeof addRow==='function'?addRow('ev',''):null;
-    if(row&&row.appendChild){
-      const a=document.createElement('a');
-      a.href=item.url; a.target='_blank'; a.rel='noopener noreferrer';
-      a.textContent=`Tap here to open ${item.label}`;
-      a.style.cssText='display:block;margin:8px 0;padding:10px 14px;border-radius:12px;background:#10231a;color:#c3ffe3;border:1px solid rgba(57,233,145,.35);text-decoration:none;width:max-content';
-      row.appendChild(a);
-    }
-    return true;
+  const apps={youtube:{label:'YouTube',url:'https://www.youtube.com/'},spotify:{label:'Spotify',url:'https://open.spotify.com/'},google:{label:'Google',url:'https://www.google.com/'},maps:{label:'Google Maps',url:'https://www.google.com/maps/'},github:{label:'GitHub',url:'https://github.com/'},gmail:{label:'Gmail',url:'https://mail.google.com/'},messages:{label:'Messages',url:'sms:'},phone:{label:'Phone',url:'tel:'}};
+  const MEMKEY='ev-visual-memory-v1';
+  const mem=()=>{try{return JSON.parse(localStorage.getItem(MEMKEY)||'{}')}catch(_){return {}}};
+  const put=m=>{try{localStorage.setItem(MEMKEY,JSON.stringify(m))}catch(_) {}};
+  function showLink(app){const item=apps[app];if(!item)return false;let opened=false;try{opened=!!window.open(item.url,'_blank','noopener,noreferrer')}catch(_){}if(opened)return true;const row=typeof addRow==='function'?addRow('ev',''):null;if(row&&row.appendChild){const a=document.createElement('a');a.href=item.url;a.target='_blank';a.rel='noopener noreferrer';a.textContent=`Tap here to open ${item.label}`;a.style.cssText='display:block;margin:8px 0;padding:10px 14px;border-radius:12px;background:#10231a;color:#c3ffe3;border:1px solid rgba(57,233,145,.35);text-decoration:none;width:max-content';row.appendChild(a)}return true}
+  function ensureStyle(){
+    if(document.getElementById('ev-visual-style'))return;
+    const s=document.createElement('style');s.id='ev-visual-style';s.textContent=`#evVisual{position:fixed;inset:0;z-index:9999;display:none;background:rgba(3,7,6,.97);backdrop-filter:blur(10px);overflow:auto;padding:18px 14px 34px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#e5fff1}#evVisual.open{display:block}#evVisual .vh{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:900px;margin:0 auto 16px}#evVisual .vt{letter-spacing:3px;font-size:12px;color:#9ee8c5;text-transform:uppercase}#evVisual .vc,#evVisual .save{border:1px solid rgba(158,232,197,.3);background:rgba(158,232,197,.05);color:#c3ffe3;border-radius:8px;padding:8px 12px;font:inherit;font-size:9px;letter-spacing:1px;cursor:pointer}#evVisual .grid{max-width:900px;margin:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}#evVisual .card{background:rgba(13,25,20,.7);border:1px solid rgba(158,232,197,.12);border-radius:10px;overflow:hidden}#evVisual img{display:block;width:100%;height:170px;object-fit:cover;background:#09100d}#evVisual .cap{padding:8px;font-size:9px;line-height:1.4;color:#a8c9ba}#evVisual .actions{max-width:900px;margin:14px auto 0;display:flex;gap:8px;flex-wrap:wrap}`;document.head.appendChild(s);
+    const box=document.createElement('section');box.id='evVisual';box.innerHTML='<div class="vh"><div class="vt">E.V. VISUAL MEMORY</div><button class="vc" type="button">CLOSE</button></div><div class="grid"></div><div class="actions"><button class="save" type="button" id="evSaveVisual">SAVE THIS DISPLAY</button></div>';document.body.appendChild(box);
+    box.querySelector('.vc').onclick=()=>box.classList.remove('open');
+    box.querySelector('#evSaveVisual').onclick=()=>{if(current.length){const m=mem();m[currentQuery]=current;put(m);say(`Saved these images as ${currentQuery}.`);}};
   }
-  function command(text){
-    const q=String(text||'').trim().replace(/^e\.?v\.?[,:\s-]*/i,'').trim().toLowerCase();
-    const m=q.match(/^(?:open|launch|start|go to)\s+(youtube|spotify|google maps|maps|google|github|gmail|messages|phone)$/i);
-    if(!m)return false;
-    const key=m[1]==='google maps'||m[1]==='maps'?'maps':m[1];
-    const item=apps[key];
-    say(`Opening ${item.label}.`);
-    showLink(key);
-    return true;
-  }
-  form.addEventListener('submit',e=>{
-    const text=input.value.trim();
-    if(!/^(?:e\.?v\.?[,:\s-]+)?(?:open|launch|start|go to)\s+(?:youtube|spotify|google maps|maps|google|github|gmail|messages|phone)$/i.test(text))return;
-    e.preventDefault();e.stopImmediatePropagation();input.value='';input.style.height='auto';
-    try{command(text)}catch(_){say('I could not open that app from Safari. I left an open link for you instead.');}
-  },true);
-  window.EVAppActions={open:showLink,command};
+  let current=[],currentQuery='';
+  function render(query,items,fromMemory){ensureStyle();current=items||[];currentQuery=query;const box=document.getElementById('evVisual'),grid=box.querySelector('.grid');grid.innerHTML='';if(!current.length){grid.innerHTML='<div style="padding:24px;grid-column:1/-1;color:#789487">No images found.</div>';box.classList.add('open');return}current.forEach(x=>{const c=document.createElement('article');c.className='card';const img=document.createElement('img');img.loading='lazy';img.src=x.url;img.alt=x.title||query;img.onerror=()=>c.remove();const cap=document.createElement('div');cap.className='cap';cap.textContent=x.title||query;c.append(img,cap);grid.appendChild(c)});box.querySelector('.vt').textContent=`E.V. VISUAL MEMORY · ${query}`+(fromMemory?' · SAVED':'');box.classList.add('open')}
+  async function visualSearch(query){const q=String(query||'').replace(/\s+/g,' ').trim();if(!q)return false;const m=mem();if(m[q]&&m[q].length){render(q,m[q],true);say(`I found the saved display for ${q}.`);return true}say(`I'll bring up ${q}.`);try{const url='https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch='+encodeURIComponent(q)+'&gsrnamespace=6&gsrlimit=12&prop=imageinfo&iiprop=url|mime&iiurlwidth=700&format=json&origin=*';const r=await fetch(url);if(!r.ok)throw new Error('image search failed');const j=await r.json();const pages=j.query&&j.query.pages?Object.values(j.query.pages):[];const items=pages.map(p=>{const ii=p.imageinfo&&p.imageinfo[0];return ii&&ii.thumburl?{url:ii.thumburl,title:p.title.replace(/^File:/,'')}:null}).filter(Boolean);if(!items.length){say(`I couldn't find images for ${q}.`);return true}m[q]=items;put(m);render(q,items,false);return true}catch(e){console.warn('E.V. visual search',e);say(`I couldn't reach the image library right now. I can try ${q} again.`);return true}}
+  function command(text){const raw=String(text||'').trim();const q=raw.replace(/^e\.?v\.?[,:\s-]*/i,'').trim();const low=q.toLowerCase();const visual=low.match(/^(?:bring up|show|display|pull up|find|look up)\s+(?:pictures?\s+of\s+|photos?\s+of\s+|images?\s+of\s+)?(.+?)(?:\s+again)?$/i);if(visual){visualSearch(visual[1].trim());return true}const save=low.match(/^save\s+(?:these|this|that)(?:\s+images?|\s+photos?|\s+display)?$/i);if(save&&current.length){const m=mem();m[currentQuery]=current;put(m);say(`Saved this display as ${currentQuery}.`);return true}const m=q.match(/^(?:open|launch|start|go to)\s+(youtube|spotify|google maps|maps|google|github|gmail|messages|phone)$/i);if(!m)return false;const key=m[1]==='google maps'||m[1]==='maps'?'maps':m[1];const item=apps[key];say(`Opening ${item.label}.`);showLink(key);return true}
+  form.addEventListener('submit',e=>{const text=input.value.trim();const isVisual=/^(?:e\.?v\.?[,:\s-]+)?(?:bring up|show|display|pull up|find|look up)\s+/i.test(text)||/^(?:e\.?v\.?[,:\s-]+)?save\s+(?:these|this|that)/i.test(text);const isApp=/^(?:e\.?v\.?[,:\s-]+)?(?:open|launch|start|go to)\s+(?:youtube|spotify|google maps|maps|google|github|gmail|messages|phone)$/i.test(text);if(!isVisual&&!isApp)return;e.preventDefault();e.stopImmediatePropagation();input.value='';input.style.height='auto';try{command(text)}catch(_){say('I could not complete that request.')}},true);
+  window.EVAppActions={open:showLink,command,visualSearch,saveVisual:()=>{if(current.length){const m=mem();m[currentQuery]=current;put(m);return true}return false}};
 })();
