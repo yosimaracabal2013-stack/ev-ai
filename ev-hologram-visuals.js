@@ -1,117 +1,176 @@
-/* E.V. HOLOGRAM VISUALS — transparent OLED-style photo projection */
+/* E.V. HOLOGRAM VISUALS — true transparent projection look */
 (function(){'use strict';
 function install(){
   if(document.getElementById('ev-hologram-visual-style')) return;
   const s=document.createElement('style');
   s.id='ev-hologram-visual-style';
   s.textContent=`
-/* Transparent-OLED look: keep the real photo visible while making it feel like
-   a floating glass projection. The photo is NOT replaced or generated. */
+/*
+  IMPORTANT: this styles the real search result image. It does not generate,
+  replace, or alter the source photo. The goal is to make the image itself
+  look like it is being projected from transparent glass, matching the
+  reference: dark/see-through surroundings, cyan luminous edges, faint scan
+  lines, glow, and floating depth.
+*/
 #evPhotoPanel{
-  background:radial-gradient(circle at 50% 46%,rgba(40,230,205,.09),transparent 34%),rgba(1,7,8,.30)!important;
-  backdrop-filter:blur(2px)!important;
+  background:
+    radial-gradient(ellipse at 50% 52%,rgba(75,255,235,.13),transparent 30%),
+    radial-gradient(ellipse at 50% 50%,rgba(30,180,170,.07),transparent 58%),
+    transparent!important;
+  backdrop-filter:none!important;
 }
 #evPhotoPanel .ev-carousel{
-  background:radial-gradient(circle at 50% 48%,rgba(50,255,230,.055),transparent 42%)!important;
+  background:transparent!important;
+  overflow:visible!important;
+  perspective:1100px!important;
 }
+/* The reference is NOT a normal web card. Remove the heavy frame and let the
+   photograph float in the dark like a transparent projection. */
 #evPhotoPanel .ev-card{
   background:transparent!important;
-  border:1px solid rgba(130,255,238,.34)!important;
-  box-shadow:0 0 18px rgba(65,255,225,.12),0 0 70px rgba(65,255,225,.055),inset 0 0 30px rgba(65,255,225,.025)!important;
-  isolation:isolate;
+  border:0!important;
+  border-radius:4px!important;
+  box-shadow:none!important;
   overflow:visible!important;
-  transition:transform .42s cubic-bezier(.2,.8,.2,1),opacity .42s ease,filter .42s ease,box-shadow .42s ease!important;
+  isolation:isolate!important;
+  transform-style:preserve-3d!important;
+  transition:transform .55s cubic-bezier(.2,.8,.2,1),opacity .5s ease,filter .5s ease!important;
 }
 #evPhotoPanel .ev-card.active{
-  background:rgba(8,28,28,.025)!important;
-  box-shadow:0 0 16px rgba(100,255,238,.42),0 0 55px rgba(65,255,225,.16),0 0 120px rgba(65,255,225,.07),inset 0 0 35px rgba(65,255,225,.045)!important;
-  animation:evHoloFloat 4.8s ease-in-out infinite;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  animation:evHoloFloat 4.6s ease-in-out infinite!important;
 }
-/* Keep the original image colors. Lower opacity + screen blending creates the
-   see-through display effect instead of turning the whole photo green. */
+/* Make the actual photo luminous and translucent instead of looking like a
+   framed screenshot. Screen blending lets the dark background show through. */
 #evPhotoPanel .ev-card img,
 #evPhotoPanel .ev-card.active img{
-  position:relative;
-  z-index:1;
+  position:relative!important;
+  z-index:1!important;
   width:100%!important;
   height:100%!important;
-  object-fit:cover!important;
-  opacity:.58!important;
+  object-fit:contain!important;
+  object-position:center!important;
+  opacity:.72!important;
   mix-blend-mode:screen!important;
-  filter:saturate(1.04) brightness(1.12) contrast(1.08)!important;
-  transform:scale(1.012);
-  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.50) 6%,#000 20%,#000 80%,rgba(0,0,0,.38) 96%,transparent 100%),linear-gradient(to right,transparent 0%,#000 7%,#000 93%,transparent 100%);
+  filter:
+    saturate(.48)
+    brightness(1.22)
+    contrast(1.10)
+    drop-shadow(0 0 3px rgba(105,255,241,.95))
+    drop-shadow(0 0 15px rgba(73,255,231,.32))!important;
+  transform:translateZ(18px) scale(1.015)!important;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.48) 5%,#000 17%,#000 83%,rgba(0,0,0,.40) 96%,transparent 100%),linear-gradient(to right,transparent 0%,#000 5%,#000 95%,transparent 100%);
   -webkit-mask-composite:source-in;
-  mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.50) 6%,#000 20%,#000 80%,rgba(0,0,0,.38) 96%,transparent 100%),linear-gradient(to right,transparent 0%,#000 7%,#000 93%,transparent 100%);
+  mask-image:linear-gradient(to bottom,transparent 0%,rgba(0,0,0,.48) 5%,#000 17%,#000 83%,rgba(0,0,0,.40) 96%,transparent 100%),linear-gradient(to right,transparent 0%,#000 5%,#000 95%,transparent 100%);
   mask-composite:intersect;
 }
-/* Thin cyan projection frame — like light emitted from glass rather than a
-   normal solid picture card. */
+/* Cyan luminous silhouette around the real photograph — like the edges of a
+   transparent OLED projection, not a physical picture frame. */
 #evPhotoPanel .ev-card:before{
-  z-index:4!important;
-  inset:-9px!important;
-  border:1px solid rgba(136,255,241,.72)!important;
-  border-radius:16px!important;
-  box-shadow:0 0 7px rgba(92,255,235,.75),0 0 25px rgba(92,255,235,.30),0 0 62px rgba(92,255,235,.10),inset 0 0 20px rgba(92,255,235,.055)!important;
-  animation:evHoloEdge 2.8s ease-in-out infinite!important;
-}
-/* Moving scan/reflection across the transparent surface. */
-#evPhotoPanel .ev-card:after{
+  content:''!important;
+  position:absolute!important;
   z-index:3!important;
-  inset:0!important;
-  background:
-    repeating-linear-gradient(to bottom,rgba(205,255,250,.12) 0,rgba(205,255,250,.12) 1px,transparent 1px,transparent 6px),
-    linear-gradient(105deg,transparent 25%,rgba(220,255,250,.13) 48%,rgba(220,255,250,.04) 53%,transparent 70%),
-    linear-gradient(to bottom,transparent 0%,transparent 43%,rgba(170,255,245,.11) 50%,transparent 57%)!important;
-  mix-blend-mode:screen!important;
-  opacity:.62!important;
+  inset:-7px!important;
+  border:1px solid rgba(128,255,242,.32)!important;
+  border-radius:5px!important;
+  background:transparent!important;
+  box-shadow:
+    0 0 5px rgba(115,255,240,.65),
+    0 0 20px rgba(78,255,231,.25),
+    0 0 65px rgba(78,255,231,.08),
+    inset 0 0 22px rgba(78,255,231,.035)!important;
   pointer-events:none!important;
-  animation:evHoloScan 3.6s linear infinite,evHoloFlicker 5.5s steps(9,end) infinite!important;
+  animation:evHoloEdge 2.7s ease-in-out infinite!important;
 }
-/* Corner lines and an inner glass boundary. */
+/* Transparent scan texture + one moving reflection, directly over the photo. */
+#evPhotoPanel .ev-card:after{
+  content:''!important;
+  position:absolute!important;
+  z-index:4!important;
+  inset:-1px!important;
+  background:
+    repeating-linear-gradient(to bottom,rgba(190,255,248,.075) 0,rgba(190,255,248,.075) 1px,transparent 1px,transparent 7px),
+    linear-gradient(104deg,transparent 24%,rgba(225,255,250,.18) 47%,rgba(225,255,250,.035) 54%,transparent 72%),
+    radial-gradient(ellipse at 50% 50%,transparent 45%,rgba(75,255,235,.10) 100%)!important;
+  mix-blend-mode:screen!important;
+  opacity:.56!important;
+  pointer-events:none!important;
+  animation:evHoloScan 3.2s linear infinite,evHoloFlicker 5.8s steps(10,end) infinite!important;
+}
+/* Thin HUD corners instead of a chunky card outline. */
 #evPhotoPanel .ev-card.active .ev-corners{
-  border-color:rgba(174,255,246,.40)!important;
-  box-shadow:0 0 12px rgba(92,255,235,.22),inset 0 0 20px rgba(92,255,235,.055)!important;
+  border-color:rgba(160,255,246,.42)!important;
+  box-shadow:0 0 14px rgba(92,255,235,.24)!important;
 }
 #evPhotoPanel .ev-card.active .ev-corners:after{
-  content:'';
-  position:absolute;
-  inset:8%;
-  border:1px solid rgba(155,255,244,.12);
-  border-radius:8px;
-  box-shadow:0 0 28px rgba(80,255,230,.08);
-  pointer-events:none;
+  content:''!important;
+  position:absolute!important;
+  inset:4%!important;
+  border:1px solid rgba(155,255,244,.07)!important;
+  border-radius:2px!important;
+  box-shadow:0 0 30px rgba(80,255,230,.06)!important;
+  pointer-events:none!important;
 }
-/* Neighboring choices float behind the selected projection. */
-#evPhotoPanel .ev-card.prev,#evPhotoPanel .ev-card.next{
-  opacity:.25!important;
-  filter:saturate(.72) brightness(.78)!important;
+/* Other results become ghosted projections sitting behind the selected one. */
+#evPhotoPanel .ev-card.prev,
+#evPhotoPanel .ev-card.next{
+  opacity:.20!important;
+  filter:saturate(.30) brightness(.72) blur(.2px)!important;
+  transform:translateZ(-90px) scale(.86)!important;
 }
-#evPhotoPanel .ev-card.prev img,#evPhotoPanel .ev-card.next img{
-  opacity:.30!important;
-  filter:saturate(.82) brightness(.92)!important;
+#evPhotoPanel .ev-card.prev img,
+#evPhotoPanel .ev-card.next img{
+  opacity:.28!important;
+  mix-blend-mode:screen!important;
+  filter:saturate(.25) brightness(1.05) drop-shadow(0 0 12px rgba(73,255,231,.22))!important;
 }
 #evPhotoPanel .ev-card:not(.active){
   background:transparent!important;
-  box-shadow:0 0 28px rgba(65,255,225,.045)!important;
+  box-shadow:none!important;
 }
-#evPhotoPanel .ev-card:not(.active) .ev-cap{opacity:.18!important}
+#evPhotoPanel .ev-card:not(.active) .ev-cap{opacity:.14!important}
 #evPhotoPanel .ev-cap{
-  z-index:5!important;
-  color:#d9fffa!important;
-  text-shadow:0 0 7px rgba(92,255,235,.9),0 0 18px rgba(92,255,235,.28)!important;
-  background:linear-gradient(transparent,rgba(0,18,18,.20),transparent)!important;
+  z-index:6!important;
+  color:rgba(190,255,247,.82)!important;
+  text-shadow:0 0 6px rgba(92,255,235,.95),0 0 18px rgba(92,255,235,.32)!important;
+  background:linear-gradient(transparent,rgba(0,12,12,.10),transparent)!important;
+  border:0!important;
 }
+/* A soft projected pool underneath gives the same floating-on-glass feeling as
+   the reference without pretending the phone has a physical transparent OLED. */
 #evPhotoPanel .ev-carousel:after{
-  box-shadow:0 0 70px rgba(60,255,230,.09),0 0 150px rgba(60,255,230,.035)!important;
+  background:radial-gradient(ellipse at center,rgba(65,255,230,.16) 0%,rgba(65,255,230,.07) 20%,transparent 65%)!important;
+  box-shadow:0 0 90px rgba(60,255,230,.11),0 0 180px rgba(60,255,230,.035)!important;
+  opacity:.8!important;
 }
-@keyframes evHoloScan{0%{background-position:0 -40px,120% 0,0 -45px}100%{background-position:0 55px,-30% 0,0 45px}}
-@keyframes evHoloFlicker{0%,100%{opacity:.60}48%{opacity:.67}50%{opacity:.45}52%{opacity:.70}76%{opacity:.57}}
-@keyframes evHoloEdge{0%,100%{opacity:.62;filter:brightness(1)}50%{opacity:.94;filter:brightness(1.30)}}
-@keyframes evHoloFloat{0%,100%{translate:0 0}50%{translate:0 -6px}}
+@keyframes evHoloScan{
+  0%{background-position:0 -45px,120% 0,0 0}
+  100%{background-position:0 65px,-30% 0,0 0}
+}
+@keyframes evHoloFlicker{
+  0%,100%{opacity:.54}
+  48%{opacity:.61}
+  50%{opacity:.40}
+  52%{opacity:.66}
+  76%{opacity:.50}
+}
+@keyframes evHoloEdge{
+  0%,100%{opacity:.50;filter:brightness(1)}
+  50%{opacity:.88;filter:brightness(1.35)}
+}
+@keyframes evHoloFloat{
+  0%,100%{transform:translateY(0) translateZ(18px) scale(1.015)}
+  50%{transform:translateY(-7px) translateZ(28px) scale(1.02)}
+}
 @media(max-width:700px){
-  #evPhotoPanel .ev-card img,#evPhotoPanel .ev-card.active img{opacity:.52!important}
-  #evPhotoPanel .ev-card.active{animation-duration:5.2s}
+  #evPhotoPanel .ev-card img,#evPhotoPanel .ev-card.active img{
+    opacity:.66!important;
+    filter:saturate(.42) brightness(1.18) contrast(1.08) drop-shadow(0 0 3px rgba(105,255,241,.95)) drop-shadow(0 0 13px rgba(73,255,231,.30))!important;
+  }
+  #evPhotoPanel .ev-card:before{inset:-5px!important}
+  #evPhotoPanel .ev-card.active{animation-duration:5.1s!important}
 }
 `;
   document.head.appendChild(s);
