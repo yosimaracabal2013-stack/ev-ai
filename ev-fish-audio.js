@@ -1,142 +1,55 @@
 /* E.V. Fish Audio voice bridge — browser-safe setup for GitHub Pages.
-   API keys are entered by the user on-device and kept only in localStorage.
-   No key is committed to GitHub. Falls back to the existing E.V. voice when
-   Fish Audio is not configured or unavailable.
+   The Fish API key is entered on-device and kept only in localStorage.
+   Never commit a key to GitHub. Falls back to the existing E.V. voice.
 */
 (function(){
-  'use strict';
-  const KEY='ev-fish-api-key';
-  const REF='ev-fish-reference-id';
-  const MODEL='s2.1-pro-free';
-  const ENDPOINT='https://api.fish.audio/v1/tts';
-  let token=0, active=null, original=null, hooked=false;
-
-  const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
-  const getKey=()=>localStorage.getItem(KEY)||'';
-  const getRef=()=>localStorage.getItem(REF)||'';
-  const configured=()=>!!getKey();
-  const stop=()=>{token++;if(active){try{active.pause();active.src='';}catch(_){}active=null;} };
-
-  function status(text){
-    const el=document.getElementById('evVoiceState');
-    if(el)el.textContent=text;
-  }
-
-  function split(text){
-    const s=clean(text), out=[]; let rest=s;
-    while(rest.length>700){
-      let cut=Math.max(rest.lastIndexOf('. ',700),rest.lastIndexOf('! ',700),rest.lastIndexOf('? ',700),rest.lastIndexOf('; ',700));
-      if(cut<220)cut=rest.lastIndexOf(' ',700);
-      if(cut<220)cut=700;
-      out.push(rest.slice(0,cut+1).trim());rest=rest.slice(cut+1).trim();
-    }
-    if(rest)out.push(rest);
-    return out;
-  }
-
-  function direction(text){
-    const s=String(text||'');
-    if(/[!?]{2,}|\b(amazing|awesome|great|wow|yes)\b/i.test(s))return '[excited] '+s;
-    if(/\b(sorry|unfortunately|sad|miss|lost)\b/i.test(s))return '[gentle] '+s;
-    return '[calm, confident, natural] '+s;
-  }
-
-  async function makeAudio(text,myToken){
-    const body={text:direction(text),format:'mp3'};
-    const ref=getRef();if(ref)body.reference_id=ref;
-    const res=await fetch(ENDPOINT,{method:'POST',headers:{Authorization:'Bearer '+getKey(),'Content-Type':'application/json',model:MODEL},body:JSON.stringify(body)});
-    if(!res.ok)throw new Error('Fish Audio '+res.status+' '+(await res.text()).slice(0,180));
-    const blob=await res.blob();
-    if(myToken!==token)throw new Error('cancelled');
-    return URL.createObjectURL(blob);
-  }
-
-  async function speak(text){
-    if(!configured()||!text)return false;
-    const myToken=++token;stop();
-    status('FISH AUDIO');
-    try{
-      const parts=split(text);
-      for(const part of parts){
-        if(myToken!==token)break;
-        const url=await makeAudio(part,myToken);
-        if(myToken!==token){URL.revokeObjectURL(url);break;}
-        await new Promise((resolve,reject)=>{
-          const a=new Audio(url);active=a;
-          a.preload='auto';a.onended=()=>{URL.revokeObjectURL(url);active=null;resolve()};
-          a.onerror=()=>{URL.revokeObjectURL(url);active=null;reject(new Error('audio playback failed'))};
-          a.play().catch(reject);
-        });
-      }
-      status('ONLINE');
-      return true;
-    }catch(err){
-      console.warn('E.V. Fish Audio:',err);
-      status('VOICE FALLBACK');
-      return false;
-    }
-  }
-
-  function configure(){
-    const key=prompt('Paste your Fish Audio API key. It stays on this device and is not saved to GitHub.');
-    if(key===null)return false;
-    const trimmed=key.trim();
-    if(!trimmed){localStorage.removeItem(KEY);localStorage.removeItem(REF);status('FISH OFF');return true;}
-    localStorage.setItem(KEY,trimmed);
-    const ref=prompt('Optional: paste a Fish Audio reference/voice ID. Leave blank to use the model default voice.');
-    if(ref&&ref.trim())localStorage.setItem(REF,ref.trim());else localStorage.removeItem(REF);
-    status('FISH READY');
-    return true;
-  }
-
-  function clear(){localStorage.removeItem(KEY);localStorage.removeItem(REF);stop();status('VOICE FALLBACK');}
-
-  window.EVFishAudio={
-    speak,stop,configure,clear,configured,
-    getReferenceId:getRef,
-    model:MODEL,
-    endpoint:ENDPOINT
-  };
-
-  function installVoiceBridge(){
-    if(hooked)return;
-    if(!window.EVReliableVoice||typeof window.EVReliableVoice.speak!=='function')return;
-    original={speak:window.EVReliableVoice.speak,stop:window.EVReliableVoice.stop};
-    window.EVReliableVoice.speak=function(text){
-      if(configured()){
-        speak(text).then(ok=>{if(!ok&&original?.speak)original.speak(text)});
-      }else original.speak(text);
-    };
-    window.EVReliableVoice.stop=function(){stop();if(original?.stop)original.stop()};
-    hooked=true;
-  }
-
-  function installCommands(){
-    if(typeof window.EVSend!=='function')return false;
-    const current=window.EVSend;
-    if(current.__fishWrapped)return true;
-    const wrapped=async function(text){
-      const c=clean(text),n=c.toLowerCase();
-      if(/^(?:hey\s+)?e\.?\s*v\.?,?\s*(?:set up|setup|configure)\s+fish\s+audio\b/i.test(c)||/^(?:set up|setup|configure)\s+fish\s+audio\b/i.test(c)){
-        configure();
-        if(typeof addRow==='function')addRow('ev',configured()?'Fish Audio is ready.':'Fish Audio setup cancelled.');
-        return true;
-      }
-      if(/^(?:hey\s+)?e\.?\s*v\.?,?\s*(?:turn off|disable|remove)\s+fish\s+audio\b/i.test(c)||/^(?:turn off|disable|remove)\s+fish\s+audio\b/i.test(c)){
-        clear();
-        if(typeof addRow==='function')addRow('ev','Fish Audio is off. I\'ll use the normal E.V. voice.');
-        return true;
-      }
-      return current.apply(this,arguments);
-    };
-    wrapped.__fishWrapped=true;window.EVSend=wrapped;return true;
-  }
-
-  function init(){
-    installVoiceBridge();installCommands();
-    const timer=setInterval(()=>{installVoiceBridge();if(installCommands()&&hooked)clearInterval(timer)},300);
-    setTimeout(()=>clearInterval(timer),10000);
-    window.addEventListener('pageshow',()=>{installVoiceBridge();installCommands()},{passive:true});
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+'use strict';
+const KEY='ev-fish-api-key', REF='ev-fish-reference-id';
+const SARAH='933563129e564b19a115bedd57b7406a';
+const MODEL='s2.1-pro-free', ENDPOINT='https://api.fish.audio/v1/tts';
+let token=0,active=null,original=null,hooked=false,commandWrapped=false;
+const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+const getKey=()=>localStorage.getItem(KEY)||'';
+const getRef=()=>localStorage.getItem(REF)||SARAH;
+const configured=()=>!!getKey();
+function status(t){const e=document.getElementById('evVoiceState');if(e)e.textContent=t}
+function stop(){token++;if(active){try{active.pause();active.src=''}catch(_){}active=null}}
+function split(t){let s=clean(t),o=[];while(s.length>700){let c=Math.max(s.lastIndexOf('. ',700),s.lastIndexOf('! ',700),s.lastIndexOf('? ',700),s.lastIndexOf('; ',700));if(c<220)c=s.lastIndexOf(' ',700);if(c<220)c=700;o.push(s.slice(0,c+1).trim());s=s.slice(c+1).trim()}if(s)o.push(s);return o}
+function direction(t){const s=String(t||'');if(/[!?]{2,}|\b(amazing|awesome|great|wow|yes)\b/i.test(s))return '[excited] '+s;if(/\b(sorry|unfortunately|sad|miss|lost)\b/i.test(s))return '[gentle] '+s;return '[calm, confident, natural] '+s}
+async function makeAudio(text,myToken){
+ const body={text:direction(text),reference_id:getRef(),format:'mp3'};
+ const r=await fetch(ENDPOINT,{method:'POST',headers:{Authorization:'Bearer '+getKey(),'Content-Type':'application/json',model:MODEL},body:JSON.stringify(body)});
+ if(!r.ok)throw new Error('Fish Audio '+r.status);
+ const b=await r.blob();if(myToken!==token)throw new Error('cancelled');return URL.createObjectURL(b)
+}
+async function speak(text){if(!configured()||!text)return false;const myToken=++token;stop();status('FISH AUDIO');try{for(const p of split(text)){if(myToken!==token)break;const u=await makeAudio(p,myToken);if(myToken!==token){URL.revokeObjectURL(u);break}await new Promise((res,rej)=>{const a=new Audio(u);active=a;a.onended=()=>{URL.revokeObjectURL(u);active=null;res()};a.onerror=()=>{URL.revokeObjectURL(u);active=null;rej(new Error('audio playback failed'))};a.play().catch(rej)})}status('ONLINE');return true}catch(e){console.warn('E.V. Fish Audio:',e);status('VOICE FALLBACK');return false}}
+function configure(){
+ const k=prompt('Paste your Fish Audio API key. It stays on this device and is not saved to GitHub.');
+ if(k===null)return false;const key=k.trim();if(!key){localStorage.removeItem(KEY);status('FISH OFF');return false}
+ localStorage.setItem(KEY,key);localStorage.setItem(REF,SARAH);status('FISH READY');
+ if(typeof addRow==='function')addRow('ev','Fish Audio is configured with the Sarah voice.');
+ return true
+}
+function clear(){localStorage.removeItem(KEY);localStorage.removeItem(REF);stop();status('VOICE FALLBACK')}
+window.EVFishAudio={speak,stop,configure,clear,configured,getReferenceId:getRef,model:MODEL,endpoint:ENDPOINT,sarahReferenceId:SARAH};
+function installVoiceBridge(){
+ if(hooked||!window.EVReliableVoice||typeof window.EVReliableVoice.speak!=='function')return;
+ original={speak:window.EVReliableVoice.speak,stop:window.EVReliableVoice.stop};
+ window.EVReliableVoice.speak=function(t){if(configured())speak(t).then(ok=>{if(!ok&&original?.speak)original.speak(t)});else original.speak(t)};
+ window.EVReliableVoice.stop=function(){stop();if(original?.stop)original.stop()};hooked=true
+}
+function handleCommand(c){
+ const s=clean(c);
+ if(/^(?:hey\s+)?e\.?\s*v\.?[,:\s-]*(?:set up|setup|configure)\s+fish(?:\s+audio)?\s*$/i.test(s)||/^(?:set up|setup|configure)\s+fish(?:\s+audio)?\s*$/i.test(s)){configure();return true}
+ if(/^(?:hey\s+)?e\.?\s*v\.?[,:\s-]*(?:turn off|disable|remove)\s+fish(?:\s+audio)?\s*$/i.test(s)){clear();if(typeof addRow==='function')addRow('ev','Fish Audio is off. I will use the normal E.V. voice.');return true}
+ return false
+}
+function installCommands(){
+ if(commandWrapped)return;
+ const form=document.getElementById('composer'),input=document.getElementById('input');if(!form||!input)return;
+ form.addEventListener('submit',function(e){const text=clean(input.value);if(handleCommand(text)){e.preventDefault();e.stopImmediatePropagation();input.value='';}},true);
+ commandWrapped=true
+}
+function init(){installVoiceBridge();installCommands();const t=setInterval(()=>{installVoiceBridge();installCommands();if(hooked&&commandWrapped)clearInterval(t)},250);setTimeout(()=>clearInterval(t),15000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
