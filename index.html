@@ -10,6 +10,20 @@
 <title>E.V.</title>
 </head>
 <body style="margin:0;background:#02070c;overflow:hidden">
-<iframe src="./EV-Command-Dashboard.html?v=20260831-2" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
+<script>
+// The old E.V. brain asks for its Groq key with prompt().
+// The new command interface keeps the brain in a hidden iframe, so that prompt
+// could be invisible/unusable on iPhone. Ask at the top-level page instead.
+(function(){
+  const KEY='ev-groq-api-key';
+  try{
+    if(!localStorage.getItem(KEY)){
+      const entered=window.prompt('E.V. needs her Groq brain key. Paste your Groq API key here. It will be stored only in this browser, not in GitHub.');
+      if(entered&&entered.trim())localStorage.setItem(KEY,entered.trim());
+    }
+  }catch(e){ console.warn('E.V. brain setup unavailable',e); }
+})();
+</script>
+<iframe src="./EV-Command-Dashboard.html?v=20260901-3" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
 </body>
 </html>
