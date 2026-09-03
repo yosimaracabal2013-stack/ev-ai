@@ -21,8 +21,8 @@
   }catch(e){ console.warn('E.V. brain setup unavailable',e); }
 })();
 </script>
-<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260903-2" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
-<script src="./ev-command-runtime-fix.js?v=3"></script>
+<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260903-3" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
+<script src="./ev-command-runtime-fix.js?v=4"></script>
 <script>
 (function(){
   const frame=document.getElementById('evDashboard');
@@ -37,14 +37,15 @@
         s.dataset.evSrc=name;
         d.head.appendChild(s);
       }
-      // The companion already has the safe external-app/window actions, including Spotify.
-      // Do not load the older actions-v2 layer: its Spotify handler navigates the hidden iframe
-      // to a spotify: URL, which is what caused the blank-screen behavior on iPhone.
-      addScript('ev-command-companion','./ev-command-companion.js?v=3');
+      // Stability layer goes first so it owns the command controls and prevents
+      // older dashboard handlers from swallowing the user's message.
+      addScript('ev-core-stability-v3','./ev-core-stability-v3.js');
+      // Companion provides movable windows and safe external-app actions.
+      addScript('ev-command-companion','./ev-command-companion.js?v=4');
     }catch(e){console.warn('E.V. command layers unavailable',e)}
   }
   frame.addEventListener('load',inject);
-  setTimeout(inject,1200);
+  setTimeout(inject,900);
 })();
 </script>
 </body>
