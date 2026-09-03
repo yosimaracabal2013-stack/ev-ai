@@ -24,7 +24,7 @@
   }catch(e){ console.warn('E.V. brain setup unavailable',e); }
 })();
 </script>
-<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260902-6" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
+<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260903-1" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
 <script src="./ev-command-runtime-fix.js?v=3"></script>
 <script>
 (function(){
@@ -33,12 +33,16 @@
     try{
       const d=frame.contentDocument;
       if(!d||!d.head)return;
-      if(d.querySelector('script[data-ev-companion]'))return;
-      const s=d.createElement('script');
-      s.src='./ev-command-companion.js?v=1';
-      s.dataset.evCompanion='1';
-      d.head.appendChild(s);
-    }catch(e){console.warn('E.V. companion injection unavailable',e)}
+      function addScript(name,src){
+        if(d.querySelector('script[data-ev-src="'+name+'"]'))return;
+        const s=d.createElement('script');
+        s.src=src;
+        s.dataset.evSrc=name;
+        d.head.appendChild(s);
+      }
+      addScript('ev-command-companion','./ev-command-companion.js?v=2');
+      addScript('ev-command-actions-v2','./ev-command-actions-v2.js?v=1');
+    }catch(e){console.warn('E.V. command layers unavailable',e)}
   }
   frame.addEventListener('load',inject);
   setTimeout(inject,1200);
