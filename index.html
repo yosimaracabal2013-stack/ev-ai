@@ -24,7 +24,25 @@
   }catch(e){ console.warn('E.V. brain setup unavailable',e); }
 })();
 </script>
-<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260902-5" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
-<script src="./ev-command-runtime-fix.js?v=2"></script>
+<iframe id="evDashboard" src="./EV-Command-Dashboard.html?v=20260902-6" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100vh;border:0"></iframe>
+<script src="./ev-command-runtime-fix.js?v=3"></script>
+<script>
+(function(){
+  const frame=document.getElementById('evDashboard');
+  function inject(){
+    try{
+      const d=frame.contentDocument;
+      if(!d||!d.head)return;
+      if(d.querySelector('script[data-ev-companion]'))return;
+      const s=d.createElement('script');
+      s.src='./ev-command-companion.js?v=1';
+      s.dataset.evCompanion='1';
+      d.head.appendChild(s);
+    }catch(e){console.warn('E.V. companion injection unavailable',e)}
+  }
+  frame.addEventListener('load',inject);
+  setTimeout(inject,1200);
+})();
+</script>
 </body>
 </html>
