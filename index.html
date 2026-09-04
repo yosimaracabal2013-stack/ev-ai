@@ -7,7 +7,7 @@
 <title>E.V.</title>
 </head>
 <body style="margin:0;background:#02070c;overflow:hidden">
-<iframe id="evDashboard" src="./EV-Core-Stable.html?v=20260903-4" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100dvh;min-height:100vh;border:0"></iframe>
+<iframe id="evDashboard" src="./EV-Core-Stable.html?v=20260904-5" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100dvh;min-height:100vh;border:0"></iframe>
 <script>
 (function(){
   const frame=document.getElementById('evDashboard');
@@ -33,6 +33,18 @@
   }
   frame.addEventListener('load',patchWeather);
   if(frame.contentDocument&&frame.contentDocument.readyState==='complete')patchWeather();
+})();
+</script>
+<script src="./ev-memory-repair-v1.js?v=20260904-1"></script>
+<script>
+(function(){
+  try{
+    const frame=document.getElementById('evDashboard');
+    if(window.__evMemoryRepairMigrated && frame){
+      const base='./EV-Core-Stable.html?v=20260904-5';
+      frame.src=base+'&memoryRepair=1';
+    }
+  }catch(_){ }
 })();
 </script>
 <script src="./ev-ui-repair-v1.js?v=20260903-1"></script>
