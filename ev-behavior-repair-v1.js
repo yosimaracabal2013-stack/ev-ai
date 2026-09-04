@@ -58,36 +58,98 @@
     }catch(_){ }
   }
 
-  function openApp(w,kind){
-    const url=kind==='youtube'?'https://www.youtube.com/':'https://open.spotify.com/';
-    const name=kind==='youtube'?'YouTube':'Spotify';
-    addReply(w,'Opening '+name+'.');
+  function openExternal(w,url){
     try{
-      const tab=w.open(url,'_blank','noopener,noreferrer');
-      if(tab){return;}
+      const a=w.document.createElement('a');
+      a.href=url;
+      a.target='_blank';
+      a.rel='noopener noreferrer';
+      a.style.display='none';
+      w.document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return true;
     }catch(_){ }
-    try{w.location.href=url;}catch(_){ }
+    try{w.parent.location.href=url;return true}catch(_){ }
+    try{w.location.href=url;return true}catch(_){ }
+    return false;
   }
 
-  function command(text,w){
+  function openApp(w,kind,query){
+    const hasQuery=!!String(query||'').trim();
+    const q=encodeURIComponent(String(query||'').trim());
+    const url=kind==='youtube'
+      ? (hasQuery?'https://www.youtube.com/results?search_query='+q:'https://www.youtube.com/')
+      : (hasQuery?'https://open.spotify.com/search/'+q:'https://open.spotify.com/');
+    const name=kind==='youtube'?'YouTube':'Spotify';
+    addReply(w,'Opening '+name+(hasQuery?' for '+String(query).trim():'.'));
+    openExternal(w,url);
+    speakLocal(w,'Opening '+name+(hasQuery?' for '+String(query).trim():'.'));
+    return true;
+  }
+
+  function parseCommand(text,w){
     const q=String(text||'').toLowerCase().replace(/[.,!?]/g,' ').replace(/\s+/g,' ').trim();
-    if(/\b(?:open|launch|start|go to|pull up)\s+(?:up\s+)?youtube\b/.test(q) || /^youtube$/.test(q)){
-      openApp(w,'youtube');
-      speakLocal(w,'Opening YouTube.');
-      return true;
+    if(!q)return false;
+
+    const yt=q.match(/(?:open|launch|start|go to|pull up)?\s*(?:up\s+)?youtube(?:\s+(?:and\s+)?(?:search|for)\s+(.+))?$/i);
+    if(yt){
+      return openApp(w,'youtube',yt[1]||'');
     }
-    if(/\b(?:open|launch|start|go to|pull up)\s+(?:up\s+)?spotify\b/.test(q) || /^spotify$/.test(q)){
-      openApp(w,'spotify');
-      speakLocal(w,'Opening Spotify.');
-      return true;
+    const yt2=q.match(/(?:open|launch|start|go to|pull up)\s+(.+?)\s+(?:on|in)\s+youtube$/i);
+    if(yt2){
+      return openApp(w,'youtube',yt2[1]);
+    }
+    const sp=q.match(/(?:open|launch|start|go to|pull up)?\s*(?:up\s+)?spotify(?:\s+(?:and\s+)?(?:search|for)\s+(.+))?$/i);
+    if(sp){
+      return openApp(w,'spotify',sp[1]||'');
+    }
+    const sp2=q.match(/(?:open|launch|start|go to|pull up)\s+(.+?)\s+(?:on|in)\s+spotify$/i);
+    if(sp2){
+      return openApp(w,'spotify',sp2[1]);
     }
     return false;
+  }
+
+  function intercept(w,doc){
+    if(w.__evCommandRepairV2)return;
+    w.__evCommandRepairV2=true;
+    const inp=doc.getElementById('input');
+    const send=doc.getElementById('sendBtn');
+    const run=()=>{
+      const t=inp&&inp.value?inp.value.trim():'';
+      if(parseCommand(t,w)){
+        if(inp)inp.value='';
+        return true;
+      }
+      return false;
+    };
+    if(send){
+      send.addEventListener('click',function(e){
+        if(run()){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      },true);
+    }
+    if(inp){
+      inp.addEventListener('keydown',function(e){
+        if(e.key==='Enter' && run()){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      },true);
+      inp.addEventListener('change',run,true);
+    }
+    const form=doc.querySelector('form');
+    if(form)form.addEventListener('submit',function(e){if(run()){e.preventDefault();e.stopImmediatePropagation();}},true);
   }
 
   function patch(){
     try{
       const w=frame.contentWindow, doc=frame.contentDocument;
       if(!w||!doc)return;
+      intercept(w,doc);
 
       if(!w.__evVoiceRepairV1){
         w.__evVoiceRepairV1=true;
@@ -113,19 +175,6 @@
             },350);
           });
           obs.observe(feed,{childList:true,subtree:true,characterData:true});
-        }
-
-        const form=doc.querySelector('form') || doc.getElementById('composer');
-        const inp=doc.getElementById('input');
-        if(form && inp){
-          form.addEventListener('submit',function(e){
-            const t=inp.value.trim();
-            if(command(t,w)){
-              e.preventDefault();
-              e.stopImmediatePropagation();
-              inp.value='';
-            }
-          },true);
         }
       }
 
