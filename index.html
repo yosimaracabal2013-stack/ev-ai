@@ -7,7 +7,7 @@
 <title>E.V.</title>
 </head>
 <body style="margin:0;background:#02070c;overflow:hidden">
-<iframe id="evDashboard" src="./EV-Core-Stable.html?v=20260904-6" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100dvh;min-height:100vh;border:0"></iframe>
+<iframe id="evDashboard" src="./EV-Core-Stable.html?v=20260904-7" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100dvh;min-height:100vh;border:0"></iframe>
 <script>
 (function(){
   const frame=document.getElementById('evDashboard');
@@ -41,7 +41,7 @@
   try{
     const frame=document.getElementById('evDashboard');
     if(window.__evMemoryRepairMigrated && frame){
-      const base='./EV-Core-Stable.html?v=20260904-6';
+      const base='./EV-Core-Stable.html?v=20260904-7';
       frame.src=base+'&memoryRepair=2';
     }
   }catch(_){ }
@@ -49,5 +49,6 @@
 </script>
 <script src="./ev-ui-repair-v1.js?v=20260903-1"></script>
 <script src="./ev-behavior-repair-v1.js?v=20260904-1"></script>
+<script src="./ev-context-limit-v1.js?v=20260904-1"></script>
 </body>
 </html>
