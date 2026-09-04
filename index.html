@@ -8,6 +8,33 @@
 </head>
 <body style="margin:0;background:#02070c;overflow:hidden">
 <iframe id="evDashboard" src="./EV-Core-Stable.html?v=20260903-4" allow="microphone;camera;geolocation" style="display:block;width:100vw;height:100dvh;min-height:100vh;border:0"></iframe>
+<script>
+(function(){
+  const frame=document.getElementById('evDashboard');
+  function patchWeather(){
+    try{
+      const w=frame.contentWindow;
+      if(!w||w.__evWeatherUnitsPatched)return;
+      const originalFetch=w.fetch.bind(w);
+      w.fetch=function(input,init){
+        try{
+          let raw=typeof input==='string'?input:(input&&input.url)||'';
+          if(raw.includes('api.open-meteo.com/v1/forecast')){
+            const u=new URL(raw,w.location.href);
+            u.searchParams.set('temperature_unit','fahrenheit');
+            u.searchParams.set('wind_speed_unit','mph');
+            input=u.toString();
+          }
+        }catch(_){ }
+        return originalFetch(input,init);
+      };
+      w.__evWeatherUnitsPatched=true;
+    }catch(_){ }
+  }
+  frame.addEventListener('load',patchWeather);
+  if(frame.contentDocument&&frame.contentDocument.readyState==='complete')patchWeather();
+})();
+</script>
 <script src="./ev-ui-repair-v1.js?v=20260903-1"></script>
 </body>
 </html>
