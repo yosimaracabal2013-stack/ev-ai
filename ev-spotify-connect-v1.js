@@ -1,11 +1,14 @@
-/* E.V. Spotify Connect v1
+/* E.V. Spotify Connect v2
    Browser-only Spotify OAuth (PKCE). No Spotify password or client secret is stored.
+   Client ID is kept locally in this browser so the user does not have to edit code.
 */
 (function(){
   'use strict';
 
-  const CLIENT_ID = 'PASTE_SPOTIFY_CLIENT_ID_HERE';
+  const DEFAULT_CLIENT_ID = '';
+  const CLIENT_ID_KEY = 'ev-spotify-client-id-v1';
   const REDIRECT_URI = 'https://yosimaracabal2013-stack.github.io/ev-ai/';
+  const CREATE_APP_URL = 'https://developer.spotify.com/dashboard/create';
   const SCOPES = [
     'playlist-read-private',
     'playlist-read-collaborative',
@@ -29,7 +32,11 @@
     }catch(_){ }
   }
 
-  function hasConfig(){return CLIENT_ID && !CLIENT_ID.includes('PASTE_SPOTIFY_CLIENT_ID_HERE')}
+  function getClientId(){
+    const saved=(localStorage.getItem(CLIENT_ID_KEY)||'').trim();
+    return saved || DEFAULT_CLIENT_ID;
+  }
+  function hasConfig(){const id=getClientId();return !!id && !id.includes('PASTE_SPOTIFY_CLIENT_ID_HERE')}
   function token(){return localStorage.getItem(TOKEN_KEY)||''}
   function saveToken(t){if(t&&t.access_token){localStorage.setItem(TOKEN_KEY,t.access_token); if(t.expires_in)localStorage.setItem('ev-spotify-exp-v1',String(Date.now()+t.expires_in*1000));} if(t&&t.refresh_token)localStorage.setItem(REFRESH_KEY,t.refresh_token)}
 
@@ -37,29 +44,48 @@
   function randomString(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return b64url(a)}
   async function challenge(v){const d=new TextEncoder().encode(v);const h=await crypto.subtle.digest('SHA-256',d);return b64url(new Uint8Array(h))}
 
+  function openCreateApp(){
+    try{ window.open(CREATE_APP_URL,'_blank','noopener,noreferrer'); }
+    catch(_){ location.href=CREATE_APP_URL; }
+  }
+
   async function connect(){
-    if(!hasConfig()){
-      reply('I’m ready to connect Spotify, but my Spotify Client ID still needs to be added. You do not need to give me your Spotify password or Client Secret.');
+    let clientId=getClientId();
+    if(!clientId){
+      reply('Your E.V. Spotify setup is ready. I just need the Spotify Client ID. I’ll open Spotify’s Create App page first.');
+      openCreateApp();
+      setTimeout(()=>{
+        try{
+          const entered=window.prompt('Paste your Spotify Client ID here. This is NOT your Spotify password or Client Secret.');
+          if(entered&&entered.trim()){
+            localStorage.setItem(CLIENT_ID_KEY,entered.trim());
+            reply('Spotify Client ID saved. Say “E.V., connect Spotify” again and I’ll start the Spotify sign-in.');
+          }
+        }catch(_){ }
+      },600);
       return;
     }
     const verifier=randomString(64), ch=await challenge(verifier), state=randomString(24);
     localStorage.setItem(VERIFIER_KEY,verifier); localStorage.setItem(STATE_KEY,state);
     const u=new URL('https://accounts.spotify.com/authorize');
-    u.search=new URLSearchParams({response_type:'code',client_id:CLIENT_ID,scope:SCOPES,redirect_uri:REDIRECT_URI,state,code_challenge_method:'S256',code_challenge:ch}).toString();
+    u.search=new URLSearchParams({response_type:'code',client_id:clientId,scope:SCOPES,redirect_uri:REDIRECT_URI,state,code_challenge_method:'S256',code_challenge:ch}).toString();
     location.href=u.toString();
   }
 
   async function exchange(code,state){
+    const clientId=getClientId();
+    if(!clientId)throw new Error('Spotify Client ID is not set.');
     if(state!==localStorage.getItem(STATE_KEY))throw new Error('Spotify authorization state did not match.');
     const verifier=localStorage.getItem(VERIFIER_KEY)||'';
-    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier})});
+    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier})});
     const j=await r.json(); if(!r.ok)throw new Error(j.error_description||j.error||'Spotify token exchange failed.');
     saveToken(j); localStorage.removeItem(VERIFIER_KEY); localStorage.removeItem(STATE_KEY); return j;
   }
 
   async function refresh(){
     const rt=localStorage.getItem(REFRESH_KEY); if(!rt)return false;
-    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:CLIENT_ID,grant_type:'refresh_token',refresh_token:rt})});
+    const clientId=getClientId(); if(!clientId)return false;
+    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId,grant_type:'refresh_token',refresh_token:rt})});
     const j=await r.json(); if(!r.ok)return false; saveToken(j); return true;
   }
 
@@ -102,6 +128,11 @@
     return p;
   }
 
+  function openSpotifyUri(uri){
+    if(!uri)return;
+    try{ location.href=uri; }catch(_){ }
+  }
+
   async function handle(text){
     const s=normalize(text); if(!s)return false;
     if(/^(connect|link|sign in|login|log in).*(spotify)$/.test(s)||s==='connect spotify'||s==='link spotify'){
@@ -112,14 +143,14 @@
       localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(REFRESH_KEY);reply('Spotify is disconnected from E.V.');return true;
     }
     if(!token()){
-      reply('Spotify is not connected yet. Say “E.V., connect Spotify” and I’ll take you through Spotify’s sign-in and permission screen.'); return true;
+      await connect(); return true;
     }
     try{
       const ps=await playlists();
       if(/best playlist|favorite playlist|favourite playlist/.test(s)){
         const p=chooseBest(ps); if(!p){reply('I couldn’t find any playlists on your Spotify account.');return true;}
         try{await playPlaylist(p);reply('Playing your best-match playlist, “'+p.name+'”.');}
-        catch(e){reply('I found “'+p.name+'”, but Spotify would not start playback. Make sure Spotify is open on an active device and that your account supports playback control.');}
+        catch(e){reply('I found “'+p.name+'”, but Spotify would not start playback. I’ll open that playlist in Spotify instead.');openSpotifyUri(p.uri);}
         return true;
       }
       const m=s.match(/(?:play|open).*(?:playlist)\s+(.+)$/);
@@ -127,14 +158,14 @@
         const q=normalize(m[1]); const p=ps.find(x=>normalize(x.name)===q)||ps.find(x=>normalize(x.name).includes(q)||q.includes(normalize(x.name)));
         if(!p){reply('I couldn’t find a Spotify playlist matching “'+m[1]+'”.');return true;}
         try{await playPlaylist(p);reply('Playing “'+p.name+'”.');}
-        catch(e){reply('I found “'+p.name+'”, but Spotify would not start playback. Make sure Spotify is open on an active device and that your account supports playback control.');}
+        catch(e){reply('I found “'+p.name+'”, but Spotify would not start playback. I’ll open that playlist in Spotify instead.');openSpotifyUri(p.uri);}
         return true;
       }
       if(/(my playlists|show.*playlists|list.*playlists)/.test(s)){
         reply(ps.length?'I found '+ps.length+' Spotify playlists. Tell me the playlist name, or say “play my best playlist”.':'I couldn’t find any playlists on your Spotify account.');return true;
       }
     }catch(e){
-      if(e.message==='NOT_CONNECTED')reply('Spotify is not connected yet. Say “E.V., connect Spotify” to connect it.');
+      if(e.message==='NOT_CONNECTED')await connect();
       else reply('Spotify gave me an error: '+e.message);
     }
     return true;
@@ -151,14 +182,13 @@
 
   function hook(){
     const f=frame(); if(!f)return;
-    const w=f.contentWindow;
     const i=input(); const b=send(); if(!i)return;
     let last='';
-    function inspect(){const t=(i.value||'').trim();if(!t||t===last)return;last=t;if(/spotify/i.test(t))handle(t).then(ok=>{if(ok){i.value='';i.dispatchEvent(new Event('input',{bubbles:true}))}}).catch(()=>{});}
+    async function inspect(){const t=(i.value||'').trim();if(!t||t===last)return;last=t;if(/spotify/i.test(t)){const ok=await handle(t).catch(()=>false);if(ok){i.value='';i.dispatchEvent(new Event('input',{bubbles:true}))}}}
     i.addEventListener('change',inspect);i.addEventListener('blur',inspect);
     i.addEventListener('keydown',e=>{if(e.key==='Enter')setTimeout(inspect,0)});
     if(b)b.addEventListener('click',()=>setTimeout(inspect,0));
-    window.EVSpotify={connect,handle,playlists,token:()=>!!token()};
+    window.EVSpotify={connect,handle,playlists,token:()=>!!token(),setClientId:(id)=>{if(id)localStorage.setItem(CLIENT_ID_KEY,String(id).trim())}};
   }
 
   callback();
