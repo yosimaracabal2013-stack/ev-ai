@@ -41,20 +41,18 @@
 
   function openApp(w,kind,query,mode){
     const q=String(query||'').trim();
-    let url='';
-    let spoken='';
+    let url='',spoken='';
     if(kind==='youtube'){
       const search=q||'funny videos';
       url='https://www.youtube.com/results?search_query='+encodeURIComponent(search);
-      spoken=q?'Opening YouTube and looking for '+q+'.':'Opening YouTube and looking for a funny video.';
+      spoken=q?'Opening YouTube and searching for '+q+'.':'Opening YouTube and searching for funny videos.';
+    }else if(kind==='google'){
+      const search=q||'E.V. AI assistant';
+      url='https://www.google.com/search?q='+encodeURIComponent(search);
+      spoken=q?'Searching Google for '+q+'.':'Opening Google.';
     }else{
-      if(mode==='playlists'||!q){
-        url='https://open.spotify.com/collection/playlists';
-        spoken='Opening your Spotify playlists.';
-      }else{
-        url='https://open.spotify.com/search/'+encodeURIComponent(q);
-        spoken='Opening Spotify and looking for '+q+'.';
-      }
+      if(mode==='playlists'||!q){url='https://open.spotify.com/collection/playlists';spoken='Opening your Spotify playlists.'}
+      else{url='https://open.spotify.com/search/'+encodeURIComponent(q);spoken='Opening Spotify and looking for '+q+'.'}
     }
     addReply(w,spoken); openExternal(w,url); speakLocal(w,spoken); return true;
   }
@@ -66,16 +64,29 @@
   function parseCommand(text,w){
     const q=normalizeCommand(text); if(!q)return false;
 
-    // YouTube: open YouTube; open/play a funny video; open/play <topic> on YouTube.
+    // YouTube: natural commands such as "E.V. open YouTube and search Spider-Man".
     if(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?youtube$/.test(q)||/^youtube$/.test(q))return openApp(w,'youtube','funny videos');
+    const ytSearch=q.match(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?youtube\s+(?:and\s+)?(?:search(?:\s+for)?|find|look\s+for|show\s+me)\s+(.+)$/);
+    if(ytSearch)return openApp(w,'youtube',ytSearch[1]);
+    const ytSearch2=q.match(/^(?:search(?:\s+for)?|find|look\s+for|show\s+me)\s+(.+?)\s+(?:on|in)\s+youtube$/);
+    if(ytSearch2)return openApp(w,'youtube',ytSearch2[1]);
     if(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?youtube\s+and\s+(?:play|find|show)\s+(?:me\s+)?(?:a\s+)?funny\s+video$/.test(q)||/^(?:play|find|show)\s+(?:me\s+)?(?:a\s+)?funny\s+video\s+(?:on\s+)?youtube$/.test(q))return openApp(w,'youtube','funny videos');
     const yt=q.match(/^(?:open|launch|start|go to|pull up)\s+(.+?)\s+(?:on|in)\s+youtube$/);
     if(yt)return openApp(w,'youtube',yt[1]);
     const yt2=q.match(/^(?:play|find|show)\s+(?:me\s+)?(.+?)\s+(?:on|in)\s+youtube$/);
     if(yt2)return openApp(w,'youtube',yt2[1]);
 
-    // Spotify: open Spotify; open/play one of my playlists; play a named playlist/song.
-    if(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?spotify$/.test(q)||/^spotify$/.test(q))return openApp(w,'spotify','', 'playlists');
+    // Google: natural commands without opening Tools first.
+    if(/^(?:open|launch|start|go to|pull up)\s+google$/.test(q)||q==='google')return openApp(w,'google','');
+    const g1=q.match(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?google\s+(?:and\s+)?(?:search(?:\s+for)?|find|look\s+for)\s+(.+)$/);
+    if(g1)return openApp(w,'google',g1[1]);
+    const g2=q.match(/^(?:search(?:\s+for)?|google)\s+(.+)$/);
+    if(g2)return openApp(w,'google',g2[1]);
+    const g3=q.match(/^look\s+(?:it\s+)?up\s+(.+)$/);
+    if(g3)return openApp(w,'google',g3[1]);
+
+    // Spotify: leave account-aware commands to the dedicated Spotify connector.
+    if(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?spotify$/.test(q)||q==='spotify')return openApp(w,'spotify','', 'playlists');
     if(/^(?:open|launch|start|go to|pull up)\s+(?:up\s+)?spotify\s+and\s+(?:play|open)\s+(?:one of )?my playlists?$/.test(q)||/^(?:play|open)\s+(?:one of )?my playlists?$/.test(q)||/^(?:play|open)\s+my\s+(?:best|favorite)\s+playlist$/.test(q))return openApp(w,'spotify','', 'playlists');
     const sp=q.match(/^(?:play|open|find|search for)\s+(?:my\s+)?playlist\s+(.+)$/);
     if(sp)return openApp(w,'spotify',sp[1]);
@@ -87,9 +98,9 @@
   }
 
   function intercept(w,doc){
-    if(w.__evCommandRepairV3)return;
-    w.__evCommandRepairV3=true;
-    const inp=doc.getElementById('input'); const send=doc.getElementById('sendBtn');
+    if(w.__evCommandRepairV4)return;
+    w.__evCommandRepairV4=true;
+    const inp=doc.getElementById('input'),send=doc.getElementById('sendBtn');
     const run=()=>{const t=inp&&inp.value?inp.value.trim():'';if(parseCommand(t,w)){if(inp)inp.value='';return true}return false};
     if(send)send.addEventListener('click',e=>{if(run()){e.preventDefault();e.stopImmediatePropagation()}},true);
     if(inp){
