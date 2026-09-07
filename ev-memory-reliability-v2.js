@@ -1,43 +1,19 @@
 (function(){
-  'use strict';
-  const KEY='ev-core-memory-v1', ARCH='ev-conversation-archive-v1', VERSION='3-reliable-save-retrieve';
-  const clean=s=>String(s??'').replace(/\s+/g,' ').trim();
-  const read=()=>{try{const v=JSON.parse(localStorage.getItem(KEY)||'{}');return v&&typeof v==='object'?v:{}}catch(_){return {}}};
-  const write=v=>{try{localStorage.setItem(KEY,JSON.stringify(v));window.__evMemoryLastWrite=Date.now();return true}catch(_){return false}};
-  const normalize=m=>({facts:Array.isArray(m?.facts)?m.facts:[],preferences:Array.isArray(m?.preferences)?m.preferences:[],projects:Array.isArray(m?.projects)?m.projects:[],tasks:Array.isArray(m?.tasks)?m.tasks:[]});
-  function bucketFor(text){const t=text.toLowerCase();if(/\b(favorite|favourite|prefer|likes?|love|hate|don'?t like)\b/.test(t))return 'preferences';if(/\b(project|building|working on|making|creating|developing)\b/.test(t))return 'projects';if(/\b(task|todo|to-do|need to|remind me)\b/.test(t))return 'tasks';return 'facts'}
-  function extract(text){
-    const t=clean(text); if(!t)return null;
-    let m=t.match(/^(?:e\.?\s*v\.?[,:]?\s*)?(?:please\s+)?(?:remember|save|store|keep in memory|memorize)\s+(?:that\s+)?(.+)$/i);
-    if(!m)return null;
-    let value=clean(m[1]).replace(/[.!]+$/,''); if(!value)return null;
-    if(/^this\b/i.test(value)) value=value.replace(/^this\b\s*/i,'');
-    return {value,bucket:bucketFor(value)};
-  }
-  function save(text){const x=extract(text);if(!x)return null;const m=normalize(read());const v=x.value;const sig=v.toLowerCase();let exists=false;for(const b of Object.keys(m)){for(const item of m[b])if(clean(item).toLowerCase()===sig)exists=true}if(!exists)m[x.bucket].push(v);const ok=write(m);window.__evMemoryLastSaved=ok?{value:v,bucket:x.bucket}:null;window.__evMemoryCount=Object.values(m).reduce((n,a)=>n+a.length,0);return {ok,value:v,bucket:x.bucket,exists,count:window.__evMemoryCount}}
-  function summary(){const m=normalize(read());return Object.entries(m).flatMap(([bucket,items])=>items.map(v=>({bucket,value:clean(v)}))).filter(x=>x.value)}
-  function isMemoryQuestion(t){return /\b(what do you remember|what did i tell you to remember|what'?s in your memory|show me my memory|do you remember|remember about me|what do you know about me)\b/i.test(t)}
-  function memoryPrompt(){const all=summary();if(!all.length)return 'No saved user memory is currently available. Do not claim that something was saved unless a memory record exists.';return 'VERIFIED E.V. MEMORY (use these as saved facts only):\n'+all.map(x=>'- ['+x.bucket+'] '+x.value).join('\n')}
-  function install(){
-    window.EVMemory={save,summary,memoryPrompt,extract,isMemoryQuestion,version:VERSION};
-    window.__evMemoryReliabilityVersion=VERSION;
-    const originalFetch=window.fetch?.bind(window); if(originalFetch&&!window.__evMemoryFetchPatched){
-      window.fetch=async function(input,init){
-        try{
-          const url=typeof input==='string'?input:(input&&input.url)||'';
-          if(url.includes('/openai/v1/chat/completions')&&init?.body){
-            const body=JSON.parse(init.body); const msgs=Array.isArray(body.messages)?body.messages:null;
-            if(msgs){const user=msgs.filter(m=>m?.role==='user').slice(-1)[0]?.content||''; if(isMemoryQuestion(user)){body.messages=[...msgs,{role:'system',content:memoryPrompt()}];init={...init,body:JSON.stringify(body)}}}
-          }
-        }catch(_){}
-        return originalFetch(input,init)
-      };window.__evMemoryFetchPatched=true;
-    }
-    const process=()=>{try{const el=document.getElementById('input');const t=el?.value||'';const result=save(t);if(result&&result.ok){window.__evMemoryLastSaved=result;setTimeout(()=>{try{const status=document.getElementById('statusText');if(status)status.textContent='MEMORY SAVED'}catch(_){}},0)}}catch(_){} };
-    document.addEventListener('click',e=>{if(e.target?.id==='sendBtn')process()},true);
-    document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement?.id==='input')process()},true);
-    document.addEventListener('change',process,true);
-    setInterval(()=>{try{const el=document.getElementById('input');if(el&&el.value&&extract(el.value))save(el.value)}catch(_){}},800);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+'use strict';
+const KEY='ev-core-memory-v1',VERSION='4-iframe-reliable-memory';
+const clean=s=>String(s??'').replace(/\s+/g,' ').trim();
+function store(w){try{const v=JSON.parse(w.localStorage.getItem(KEY)||'{}');return v&&typeof v==='object'?{facts:Array.isArray(v.facts)?v.facts:[],preferences:Array.isArray(v.preferences)?v.preferences:[],projects:Array.isArray(v.projects)?v.projects:[],tasks:Array.isArray(v.tasks)?v.tasks:[]}:{facts:[],preferences:[],projects:[],tasks:[]}}catch(_){return {facts:[],preferences:[],projects:[],tasks:[]}}}
+function put(w,m){try{w.localStorage.setItem(KEY,JSON.stringify(m));return true}catch(_){return false}}
+function bucket(v){const t=v.toLowerCase();if(/\b(favorite|favourite|prefer|likes?|love|hate|don'?t like)\b/.test(t))return'preferences';if(/\b(project|building|working on|making|creating|developing)\b/.test(t))return'projects';if(/\b(task|todo|to-do|need to|remind me)\b/.test(t))return'tasks';return'facts'}
+function extract(t){t=clean(t);const m=t.match(/^(?:e\.?\s*v\.?[,:]?\s*)?(?:please\s+)?(?:remember|save|store|keep in memory|memorize)\s+(?:that\s+)?(.+)$/i);if(!m)return null;const value=clean(m[1]).replace(/[.!]+$/,'');return value?{value,bucket:bucket(value)}:null}
+function save(w,text){const x=extract(text);if(!x)return null;const m=store(w),sig=x.value.toLowerCase();let exists=false;for(const b of Object.keys(m))if(m[b].some(v=>clean(v).toLowerCase()===sig))exists=true;if(!exists)m[x.bucket].push(x.value);const ok=put(w,m);const count=Object.values(m).reduce((n,a)=>n+a.length,0);w.__evVerifiedMemory={last:x,ok,count};return{...x,ok,exists,count}}
+function summary(w){const m=store(w);return Object.entries(m).flatMap(([b,a])=>a.map(v=>({bucket:b,value:clean(v)}))).filter(x=>x.value)}
+function memoryQuestion(t){return/\b(what do you remember|what did i tell you to remember|what'?s in your memory|show me my memory|do you remember|remember about me|what do you know about me)\b/i.test(t)}
+function prompt(w){const a=summary(w);return a.length?'VERIFIED E.V. MEMORY. These are actually saved records; use only these as saved memory:\n'+a.map(x=>'- ['+x.bucket+'] '+x.value).join('\n'):'VERIFIED E.V. MEMORY: no saved records are currently available. Never claim a memory was saved unless it exists here.'}
+function install(){const frame=document.getElementById('evDashboard');if(!frame||!frame.contentWindow)return;const w=frame.contentWindow;if(w.__evMemoryReliabilityInstalled)return;w.__evMemoryReliabilityInstalled=true;w.__evMemoryReliabilityVersion=VERSION;w.EVMemory={save:t=>save(w,t),summary:()=>summary(w),prompt:()=>prompt(w)};
+const originalFetch=w.fetch.bind(w);w.fetch=async function(input,init){try{const url=typeof input==='string'?input:(input&&input.url)||'';if(url.includes('/openai/v1/chat/completions')&&init?.body){const body=JSON.parse(init.body),msgs=Array.isArray(body.messages)?body.messages:null;if(msgs){const u=msgs.filter(m=>m?.role==='user').slice(-1)[0]?.content||'';if(memoryQuestion(u)){body.messages=[...msgs,{role:'system',content:prompt(w)}];init={...init,body:JSON.stringify(body)}}}}}catch(_){}return originalFetch(input,init)};
+const process=()=>{const el=w.document.getElementById('input');if(!el)return;const r=save(w,el.value||'');if(r){const s=w.document.getElementById('statusText');if(s)s.textContent='MEMORY SAVED';setTimeout(()=>{if(s)s.textContent='READY'},1800)}};
+w.document.addEventListener('click',e=>{if(e.target?.id==='sendBtn')process()},true);w.document.addEventListener('keydown',e=>{if(e.key==='Enter'&&w.document.activeElement?.id==='input')process()},true);w.document.addEventListener('input',()=>{const el=w.document.getElementById('input');if(el&&extract(el.value))save(w,el.value)},true);
+}
+const boot=()=>{install();setTimeout(install,600);setTimeout(install,1800)};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
