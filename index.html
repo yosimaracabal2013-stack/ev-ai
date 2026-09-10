@@ -13,7 +13,7 @@
 (function(){const frame=document.getElementById('evDashboard');function patchWeather(){try{const w=frame.contentWindow;if(!w||w.__evWeatherUnitsPatched)return;const originalFetch=w.fetch.bind(w);w.fetch=function(input,init){try{let raw=typeof input==='string'?input:(input&&input.url)||'';if(raw.includes('api.open-meteo.com/v1/forecast')){const u=new URL(raw,w.location.href);u.searchParams.set('temperature_unit','fahrenheit');u.searchParams.set('wind_speed_unit','mph');input=u.toString()}}catch(_){}return originalFetch(input,init)};w.__evWeatherUnitsPatched=true}catch(_) {}}frame.addEventListener('load',patchWeather);if(frame.contentDocument&&frame.contentDocument.readyState==='complete')patchWeather()})();
 </script>
 <script src="./ev-memory-repair-v1.js?v=20260904-2"></script>
-<script>(function(){try{const frame=document.getElementById('evDashboard');if(window.__evMemoryRepairMigrated&&frame)frame.src='./EV-Core-Stable.html?v=20260907-2&memoryRepair=2'}catch(_){}})();</script>
+<script>(function(){try{const frame=document.getElementById('evDashboard');if(window.__evMemoryRepairMigrated&&frame)frame.src='./EV-Core-Stable.html?v=20260907-2&memoryRepair=2'}catch(_) {}})();</script>
 <script src="./ev-memory-reliability-v2.js?v=20260907-2"></script>
 <script src="./ev-brain-router-v1.js?v=20260907-1"></script>
 <script src="./ev-connections-hub-v1.js?v=20260908-2"></script>
@@ -32,6 +32,7 @@
 <script src="./ev-autovoice-v1.js?v=20260910-1"></script>
 <script src="./ev-search-assistant-v1.js?v=20260910-1"></script>
 <script src="./ev-voice-default-v1.js?v=20260910-1"></script>
+<script src="./ev-system-awareness-v1.js?v=20260910-1"></script>
 <script>
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./ev-sw.js').catch(()=>{}))}
 </script>
