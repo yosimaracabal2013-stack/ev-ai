@@ -1,94 +1,46 @@
-/* E.V. Spotify Connect v6 — verified connection state + send-only commands.
-   IMPORTANT: Spotify actions must NOT run while the user is merely typing.
-*/
+/* E.V. Spotify Connect v7 — verified connection state, playlist + track playback, send-only commands. */
 (function(){
 'use strict';
-const CLIENT_ID_KEY='ev-spotify-client-id-v1';
-const REDIRECT_URI='https://yosimaracabal2013-stack.github.io/ev-ai/';
-const CREATE_APP_URL='https://developer.spotify.com/dashboard/create';
+const CLIENT_ID_KEY='ev-spotify-client-id-v1',REDIRECT_URI='https://yosimaracabal2013-stack.github.io/ev-ai/',CREATE_APP_URL='https://developer.spotify.com/dashboard/create';
 const SCOPES='playlist-read-private playlist-read-collaborative user-read-playback-state user-modify-playback-state';
 const TOKEN_KEY='ev-spotify-token-v1',REFRESH_KEY='ev-spotify-refresh-v1',VERIFIER_KEY='ev-spotify-verifier-v1',STATE_KEY='ev-spotify-state-v1',EXP_KEY='ev-spotify-exp-v1';
-const frame=()=>document.getElementById('evDashboard');
-const win=()=>{const f=frame();return f&&f.contentWindow};
-const input=()=>{const w=win();return w&&w.document.getElementById('input')};
-const send=()=>{const w=win();return w&&w.document.getElementById('sendBtn')};
+const frame=()=>document.getElementById('evDashboard'),win=()=>{const f=frame();return f&&f.contentWindow},input=()=>{const w=win();return w&&w.document.getElementById('input')},send=()=>{const w=win();return w&&w.document.getElementById('sendBtn')};
 function reply(text){const msg=String(text||'');try{const i=input(),b=send();if(i&&b){i.value=msg;i.dispatchEvent(new Event('input',{bubbles:true}));b.click();return true}}catch(_){}return false}
-const clientId=()=>localStorage.getItem(CLIENT_ID_KEY)||'';
-const token=()=>localStorage.getItem(TOKEN_KEY)||'';
+const clientId=()=>localStorage.getItem(CLIENT_ID_KEY)||'',token=()=>localStorage.getItem(TOKEN_KEY)||'';
 function saveToken(t){if(t?.access_token)localStorage.setItem(TOKEN_KEY,t.access_token);if(t?.refresh_token)localStorage.setItem(REFRESH_KEY,t.refresh_token);if(t?.expires_in)localStorage.setItem(EXP_KEY,String(Date.now()+t.expires_in*1000))}
-function b64url(bytes){let s='';bytes.forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-function randomString(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return b64url(a)}
-async function challenge(v){return b64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))))}
+function b64url(bytes){let s='';bytes.forEach(b=>s+=String.fromCharCode(b));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}function randomString(n){const a=new Uint8Array(n);crypto.getRandomValues(a);return b64url(a)}async function challenge(v){return b64url(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v))))}
 function openCreate(){try{window.open(CREATE_APP_URL,'_blank','noopener,noreferrer')}catch(_){location.href=CREATE_APP_URL}}
-async function connect(){
- let id=clientId().trim();
- if(!id){reply('I need your Spotify Client ID first. I opened Spotify app setup. Paste only the Client ID here — never your Spotify password or Client Secret.');openCreate();setTimeout(()=>{const x=window.prompt('Paste your Spotify Client ID here. Never paste your Spotify password or Client Secret.');if(x?.trim()){localStorage.setItem(CLIENT_ID_KEY,x.trim());reply('Client ID saved. Say “E.V., connect Spotify” and I’ll start sign-in.')}},600);return}
- const verifier=randomString(64),state=randomString(24),ch=await challenge(verifier);
- localStorage.setItem(VERIFIER_KEY,verifier);localStorage.setItem(STATE_KEY,state);
- const u=new URL('https://accounts.spotify.com/authorize');
- u.search=new URLSearchParams({response_type:'code',client_id:id,scope:SCOPES,redirect_uri:REDIRECT_URI,state,code_challenge_method:'S256',code_challenge:ch}).toString();
- reply('Opening Spotify sign-in now.');location.href=u.toString();
-}
-async function exchange(code,state){
- if(state!==localStorage.getItem(STATE_KEY))throw Error('Spotify authorization state did not match.');
- const verifier=localStorage.getItem(VERIFIER_KEY)||'';if(!verifier)throw Error('Spotify sign-in session expired. Please connect again.');
- const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId(),grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier})});
- const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error_description||j.error||'Spotify token exchange failed.');
- saveToken(j);localStorage.removeItem(VERIFIER_KEY);localStorage.removeItem(STATE_KEY);return j;
-}
+async function connect(){let id=clientId().trim();if(!id){reply('I need your Spotify Client ID first. I opened Spotify app setup. Paste only the Client ID here — never your Spotify password or Client Secret.');openCreate();setTimeout(()=>{const x=window.prompt('Paste your Spotify Client ID here. Never paste your Spotify password or Client Secret.');if(x?.trim()){localStorage.setItem(CLIENT_ID_KEY,x.trim());reply('Client ID saved. Say “E.V., connect Spotify” and I’ll start sign-in.')}},600);return}const verifier=randomString(64),state=randomString(24),ch=await challenge(verifier);localStorage.setItem(VERIFIER_KEY,verifier);localStorage.setItem(STATE_KEY,state);const u=new URL('https://accounts.spotify.com/authorize');u.search=new URLSearchParams({response_type:'code',client_id:id,scope:SCOPES,redirect_uri:REDIRECT_URI,state,code_challenge_method:'S256',code_challenge:ch}).toString();reply('Opening Spotify sign-in now.');location.href=u.toString()}
+async function exchange(code,state){if(state!==localStorage.getItem(STATE_KEY))throw Error('Spotify authorization state did not match.');const verifier=localStorage.getItem(VERIFIER_KEY)||'';if(!verifier)throw Error('Spotify sign-in session expired. Please connect again.');const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:clientId(),grant_type:'authorization_code',code,redirect_uri:REDIRECT_URI,code_verifier:verifier})});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.error_description||j.error||'Spotify token exchange failed.');saveToken(j);localStorage.removeItem(VERIFIER_KEY);localStorage.removeItem(STATE_KEY);return j}
 async function refresh(){const rt=localStorage.getItem(REFRESH_KEY),id=clientId();if(!rt||!id)return false;const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:id,grant_type:'refresh_token',refresh_token:rt})});const j=await r.json().catch(()=>({}));if(!r.ok)return false;saveToken(j);return true}
-async function api(path,opts={}){
- let t=token();if(!t)throw Error('NOT_CONNECTED');
- let h=Object.assign({'Authorization':'Bearer '+t},opts.headers||{});
- let r=await fetch('https://api.spotify.com/v1'+path,Object.assign({},opts,{headers:h}));
- if(r.status===401&&await refresh()){t=token();h.Authorization='Bearer '+t;r=await fetch('https://api.spotify.com/v1'+path,Object.assign({},opts,{headers:h}))}
- if(r.status===204)return null;
- const j=await r.json().catch(()=>({}));if(!r.ok){const e=Error(j.error?.message||('Spotify request failed ('+r.status+')'));e.status=r.status;throw e}return j;
-}
-async function verify(){if(!token())return {connected:false,reason:'no token'};try{const me=await api('/me');return {connected:true,name:me.display_name||me.id||'your Spotify account'}}catch(e){if(e.status===401){localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(REFRESH_KEY);return {connected:false,reason:'authorization expired'}}throw e}}
-async function devices(){return (await api('/me/player/devices')).devices||[]}
-async function playlists(){const out=[];let offset=0;while(true){const j=await api('/me/playlists?limit=50&offset='+offset),items=j.items||[];out.push(...items);if(!j.next||!items.length||out.length>=500)break;offset+=items.length}return out}
+async function api(path,opts={}){let t=token();if(!t)throw Error('NOT_CONNECTED');let h=Object.assign({'Authorization':'Bearer '+t},opts.headers||{});let r=await fetch('https://api.spotify.com/v1'+path,Object.assign({},opts,{headers:h}));if(r.status===401&&await refresh()){t=token();h.Authorization='Bearer '+t;r=await fetch('https://api.spotify.com/v1'+path,Object.assign({},opts,{headers:h}))}if(r.status===204)return null;const j=await r.json().catch(()=>({}));if(!r.ok){const e=Error(j.error?.message||('Spotify request failed ('+r.status+')'));e.status=r.status;throw e}return j}
+async function verify(){if(!token())return {connected:false,reason:'no token'};try{const me=await api('/me');return {connected:true,name:me.display_name||me.id||'your Spotify account',id:me.id||''}}catch(e){if(e.status===401){localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(REFRESH_KEY);return {connected:false,reason:'authorization expired'}}throw e}}
+async function devices(){return (await api('/me/player/devices')).devices||[]}async function playlists(){const out=[];let offset=0;while(true){const j=await api('/me/playlists?limit=50&offset='+offset),items=j.items||[];out.push(...items);if(!j.next||!items.length||out.length>=500)break;offset+=items.length}return out}
+async function searchTracks(q){const j=await api('/search?type=track&limit=10&q='+encodeURIComponent(q));return j.tracks?.items||[]}
+async function player(){return await api('/me/player').catch(e=>{if(e.status===204)return null;throw e})}
 async function bestDevice(){try{const ds=await devices();return ds.find(d=>d.is_active&&!d.is_restricted)||ds.find(d=>!d.is_restricted)||null}catch(_){return null}}
-async function play(uri){const d=await bestDevice(),body={context_uri:uri};if(d?.id)body.device_id=d.id;await api('/me/player/play',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+async function playPlaylist(uri){const d=await bestDevice(),body={context_uri:uri};if(d?.id)body.device_id=d.id;await api('/me/player/play',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+async function playTrack(uri){const d=await bestDevice(),body={uris:[uri]};if(d?.id)body.device_id=d.id;await api('/me/player/play',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
 function friendly(e){const m=String(e?.message||e||'');if(/premium/i.test(m))return'Spotify playback control requires Premium.';if(/active device|No active device|device/i.test(m))return'Open Spotify on one of your devices first so it has an active player.';if(e?.status===403)return'Spotify denied playback control for this account or device.';return m}
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
-function isConnect(s){return /^(connect|link|sign in|login|log in)\s+spotify$/.test(norm(s))}
-function isStatus(s){const t=norm(s);return /\b(is|are|am)\b.*\b(spotify|connected|linked)\b/.test(t)||/\b(spotify)\b.*\b(connected|linked)\b/.test(t)||/\b(are you|are we|do you have)\b.*\bspotify\b/.test(t)}
-function isSpotifyAction(s){const t=norm(s);return /\b(spotify|playlist|playlists)\b/.test(t)&&/\b(play|put on|start|open|show|list|find|search|connect|link|stop|pause|skip|next|previous)\b/.test(t)}
-async function handle(text){
- const s=norm(text);if(!s)return false;
- if(isConnect(s)){await connect();return true}
- if(isStatus(s)){
-  try{const v=await verify();if(v.connected)reply('Yes. Spotify is connected right now as '+v.name+'. I can access the permissions you granted E.V.');else reply('No. Spotify is not connected right now'+(v.reason==='authorization expired'?'; the authorization expired. Say “E.V., connect Spotify” to reconnect.':'.'))}
-  catch(e){reply('I could not verify Spotify right now: '+friendly(e))}return true;
+function isConnect(s){return /^(connect|link|sign in|login|log in)\s+spotify$/.test(norm(s))}function isStatus(s){const t=norm(s);return /\b(is|are|am)\b.*\b(spotify|connected|linked)\b/.test(t)||/\bspotify\b.*\b(connected|linked)\b/.test(t)||/\b(are you|are we|do you have)\b.*\bspotify\b/.test(t)}
+function isSpotifyAction(s){const t=norm(s);return /\b(spotify|playlist|playlists|song|music|track)\b/.test(t)&&/\b(play|put on|start|open|show|list|find|search|connect|link|stop|pause|skip|next|previous)\b/.test(t)}
+async function handle(text){const s=norm(text);if(!s)return false;if(isConnect(s)){await connect();return true}if(isStatus(s)){try{const v=await verify();if(v.connected)reply('Yes. Spotify is connected right now as '+v.name+'.');else reply('No. Spotify is not connected right now'+(v.reason==='authorization expired'?'; the authorization expired. Say “E.V., connect Spotify” to reconnect.':'.'))}catch(e){reply('I could not verify Spotify right now: '+friendly(e))}return true}
+if(/\b(disconnect|sign out|log out|logout)\b.*\bspotify\b/.test(s)){localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(REFRESH_KEY);localStorage.removeItem(EXP_KEY);reply('Spotify is disconnected from E.V.');return true}
+if(/^open spotify$/.test(s)){location.href='https://open.spotify.com/';return true}if(!isSpotifyAction(s))return false;if(!token()){await connect();return true}
+try{
+ if(/\b(best playlist|favorite playlist|favourite playlist|one of my playlists)\b/.test(s)){const ps=await playlists(),p=ps.slice().sort((a,b)=>(b.items?.total||b.tracks?.total||0)-(a.items?.total||a.tracks?.total||0))[0];if(!p){reply('I am connected to Spotify, but I could not find a playlist on this account.');return true}try{await playPlaylist(p.uri);reply('Playing '+p.name+'.')}catch(e){reply('I found '+p.name+', but Spotify would not start playback. '+friendly(e))}return true}
+ if(/\b(my playlists|show.*playlists|list.*playlists)\b/.test(s)){const ps=await playlists();reply(ps.length?'I found '+ps.length+' Spotify playlists. Tell me a playlist name and I can use it.':'I could not find any playlists on this account.');return true}
+ if(/\b(play|put on|start)\b/.test(s)){
+  let q=s.replace(/\b(e v|ev)\b/g,'').replace(/\b(play|put on|start)\b/g,'').replace(/\bon spotify\b/g,'').replace(/\bthe song\b/g,'').trim();
+  const ps=await playlists();const p=ps.find(x=>norm(x.name)===q)||ps.find(x=>norm(x.name).includes(q)||q.includes(norm(x.name)));
+  if(p){try{await playPlaylist(p.uri);reply('Playing playlist '+p.name+'.')}catch(e){reply('I found '+p.name+', but Spotify would not start playback. '+friendly(e))}return true}
+  const tracks=await searchTracks(q);const tr=tracks[0];if(!tr){reply('I could not find “'+q+'” on Spotify.');return true}
+  try{await playTrack(tr.uri);reply('Playing '+tr.name+' by '+(tr.artists?.map(a=>a.name).join(', ')||'the artist')+'.')}catch(e){reply('I found '+tr.name+', but Spotify would not start playback. '+friendly(e))}return true;
  }
- if(/\b(disconnect|sign out|log out|logout)\b.*\bspotify\b/.test(s)){localStorage.removeItem(TOKEN_KEY);localStorage.removeItem(REFRESH_KEY);localStorage.removeItem(EXP_KEY);reply('Spotify is disconnected from E.V.');return true}
- if(/^open spotify$/.test(s)){location.href='https://open.spotify.com/';return true}
- if(!isSpotifyAction(s))return false;
- if(!token()){await connect();return true}
- try{
-  if(/\b(best playlist|favorite playlist|favourite playlist|one of my playlists)\b/.test(s)){
-   const ps=await playlists();const p=ps.slice().sort((a,b)=>(b.items?.total||b.tracks?.total||0)-(a.items?.total||a.tracks?.total||0))[0];
-   if(!p){reply('I am connected to Spotify, but I could not find a playlist on this account.');return true}
-   try{await play(p.uri);reply('Playing '+p.name+'.')}catch(e){reply('I found '+p.name+', but Spotify would not start playback. '+friendly(e))}return true;
-  }
-  if(/\b(my playlists|show.*playlists|list.*playlists)\b/.test(s)){const ps=await playlists();reply(ps.length?'I found '+ps.length+' Spotify playlists. Tell me a playlist name and I can use it.':'I could not find any playlists on this account.');return true}
-  if(/\b(play|put on|start)\b/.test(s)){
-   const q=s.replace(/\b(e v|ev)\b/g,'').replace(/\b(play|put on|start)\b/g,'').replace(/\bon spotify\b/g,'').trim();
-   const ps=await playlists();const p=ps.find(x=>norm(x.name)===q)||ps.find(x=>norm(x.name).includes(q)||q.includes(norm(x.name)));
-   if(p){try{await play(p.uri);reply('Playing '+p.name+'.')}catch(e){reply('I found '+p.name+', but Spotify would not start playback. '+friendly(e))}return true}
-  }
- }catch(e){if(e.message==='NOT_CONNECTED')await connect();else reply('Spotify gave E.V. this error: '+friendly(e));}
- return true;
-}
+ if(/\b(what.*playing|currently playing|now playing|spotify status)\b/.test(s)){const p=await player();if(!p?.item){reply('Spotify is connected, but there is no active track right now.');return true}reply('Spotify is playing '+p.item.name+' by '+(p.item.artists?.map(a=>a.name).join(', ')||'the artist')+(p.device?.name?' on '+p.device.name+'.':'.'));return true}
+}catch(e){if(e.message==='NOT_CONNECTED')await connect();else reply('Spotify gave E.V. this error: '+friendly(e))}return true}
 async function callback(){const u=new URL(location.href),code=u.searchParams.get('code'),state=u.searchParams.get('state'),err=u.searchParams.get('error');if(err){history.replaceState({},'',REDIRECT_URI);reply('Spotify sign-in was cancelled or denied.');return}if(!code||!clientId())return;try{await exchange(code,state);history.replaceState({},'',REDIRECT_URI);const v=await verify();reply(v.connected?'Spotify is connected as '+v.name+'. I verified the connection.':'Spotify authorization completed, but I could not verify it.')}catch(e){history.replaceState({},'',REDIRECT_URI);reply('Spotify connection failed: '+friendly(e))}}
-function hook(){
- const f=frame(),i=input(),b=send();if(!f||!i||i.__evSpotifyHook)return;i.__evSpotifyHook=true;
- // ONLY inspect after an actual send/Enter. Typing, input, change, and blur never trigger Spotify actions.
- const inspect=async()=>{const t=(i.value||'').trim();if(!t)return;const ok=await handle(t).catch(()=>false);if(ok){i.value='';i.dispatchEvent(new Event('input',{bubbles:true}))}};
- if(b)b.addEventListener('click',inspect,true);
- i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey)setTimeout(inspect,0)},true);
- window.EVSpotify={connect,handle,playlists,devices,verify,token:()=>!!token(),status:async()=>await verify(),setClientId:id=>{if(id)localStorage.setItem(CLIENT_ID_KEY,String(id).trim())}};
-}
+function hook(){const f=frame(),i=input(),b=send();if(!f||!i||i.__evSpotifyHook)return;i.__evSpotifyHook=true;const inspect=async()=>{const t=(i.value||'').trim();if(!t)return;const ok=await handle(t).catch(()=>false);if(ok){i.value='';i.dispatchEvent(new Event('input',{bubbles:true}))}};if(b)b.addEventListener('click',inspect,true);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey)setTimeout(inspect,0)},true);window.EVSpotify={connect,handle,playlists,searchTracks,devices,verify,player,playTrack,playPlaylist,token:()=>!!token(),status:async()=>await verify(),setClientId:id=>{if(id)localStorage.setItem(CLIENT_ID_KEY,String(id).trim())}}}
 callback();const f=frame();if(f)f.addEventListener('load',()=>setTimeout(hook,250));setTimeout(hook,1000);
 })();
