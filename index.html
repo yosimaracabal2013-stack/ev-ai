@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#02070c">
+<link rel="manifest" href="./manifest.json">
 <title>E.V.</title>
 </head>
 <body style="margin:0;background:#02070c;overflow:hidden">
@@ -20,10 +21,14 @@
 <script src="./ev-command-router-v2.js?v=20260908-1"></script>
 <script src="./ev-context-limit-v1.js?v=20260904-1"></script>
 <script src="./ev-spotify-connect-v1.js?v=20260909-1"></script>
-<script src="./ev-fish-repair-v2.js?v=20260907-1"></script>
+<script src="./ev-fish-repair-v2.js?v=20260909-1"></script>
 <script src="./ev-vision-design-v1.js?v=20260907-1"></script>
 <script src="./ev-personality-v1.js?v=20260907-1"></script>
 <script src="./ev-model-import-repair-v1.js?v=20260907-1"></script>
 <script src="./ev-enhancements-v1.js?v=20260909-1"></script>
+<script src="./ev-reminders-v1.js?v=20260909-1"></script>
+<script>
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./ev-sw.js').catch(()=>{}))}
+</script>
 </body>
 </html>
