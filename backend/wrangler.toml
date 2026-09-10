@@ -1,0 +1,10 @@
+name = "ev-reminder-backend"
+main = "worker.js"
+compatibility_date = "2026-09-09"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "REMINDERS"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
