@@ -7,17 +7,18 @@
       const w=frame.contentWindow;if(!w||w.__evAutoVoiceV1)return;w.__evAutoVoiceV1=true;
       let active=false,restarting=false,recognition=null,lastText='',lastAt=0;
       const add=t=>{try{w.add(t)}catch(_) {}};
+      const normalize=text=>String(text||'').replace(/^\s*(?:hey\s+)?(?:e\.?\s*v\.?|e\.?v|eevee|evie|if)(?:\s*[,:;\-])?\s*/i,'').trim();
       function makeRecognition(){
         const R=w.SpeechRecognition||w.webkitSpeechRecognition;
         if(!R)return null;
-        const r=new R();r.lang='en-US';r.continuous=true;r.interimResults=false;r.maxAlternatives=1;
+        const r=new R();r.lang='en-US';r.continuous=true;r.interimResults=false;r.maxAlternatives=3;
         r.onresult=async e=>{
           for(let i=e.resultIndex;i<e.results.length;i++){
             if(!e.results[i].isFinal)continue;
             const text=String(e.results[i][0]?.transcript||'').trim();
             if(!text)continue;
             const now=Date.now();if(text===lastText&&now-lastAt<2500)continue;lastText=text;lastAt=now;
-            const cleaned=text.replace(/^(hey\s+)?e\.?\s*v\.?[,:;]?\s*/i,'').trim();
+            const cleaned=normalize(text);
             if(!cleaned)continue;
             const input=w.document.getElementById('input');if(input){input.value=cleaned;input.dispatchEvent(new Event('input',{bubbles:true}))}
             try{if(typeof w.sendMessage==='function')await w.sendMessage(cleaned);else w.document.getElementById('sendBtn')?.click()}catch(_){}
@@ -41,11 +42,11 @@
         if(!R){add('Hands-free voice is not supported by this browser.');return false}
         return startListening();
       }
-      w.EVAutoVoice={enable,disable:stopListening,state:()=>active};
+      w.EVAutoVoice={enable,disable:stopListening,state:()=>active,normalize};
       const originalSend=w.sendMessage;
       if(typeof originalSend==='function')w.sendMessage=async function(text){const r=await originalSend.call(w,text);if(active)setTimeout(startListening,700);return r};
       w.document.addEventListener('visibilitychange',()=>{if(!w.document.hidden&&active)setTimeout(startListening,300)});
-      // One-time user activation is unavoidable for microphone permission on browsers; after permission is granted, E.V. keeps the conversation going automatically.
+      // Browsers require one user activation for microphone permission. After permission is granted, E.V. keeps listening automatically.
       const activateOnce=()=>{if(!active)enable();w.document.removeEventListener('click',activateOnce);w.document.removeEventListener('touchend',activateOnce)};
       w.document.addEventListener('click',activateOnce,{passive:true});w.document.addEventListener('touchend',activateOnce,{passive:true});
     }catch(e){console.warn('auto voice attach failed',e)}
